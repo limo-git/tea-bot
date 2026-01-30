@@ -9,6 +9,7 @@ from database.queries import search_with_context
 from database.supabase_client import supabase_client
 from bot.permissions import admin_only
 from config import Config
+from database.server_settings import server_settings_client
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -193,10 +194,14 @@ class BotCommands:
         await interaction.response.defer(ephemeral=True)
         
         try:
+            server_id = interaction.guild.id
+            
             if action == "view_settings":
-                excluded = Config.get_excluded_channel_ids()
+                excluded = await server_settings_client.get_excluded_channels(server_id)
+                settings = await server_settings_client.get_server_settings(server_id)
+                
                 if not excluded:
-                    await interaction.followup.send("No channels are currently excluded.", ephemeral=True)
+                    excluded_text = "No channels are currently excluded."
                 else:
                     channel_mentions = []
                     for ch_id in excluded:
@@ -205,47 +210,50 @@ class BotCommands:
                             channel_mentions.append(ch.mention)
                         else:
                             channel_mentions.append(f"Unknown Channel ({ch_id})")
-                    
-                    await interaction.followup.send(
-                        f"**Excluded Channels:**\n" + "\n".join(channel_mentions),
-                        ephemeral=True
-                    )
+                    excluded_text = "**Excluded Channels:**\n" + "\n".join(channel_mentions)
+                
+                retention_days = settings.get('retention_days', 30) if settings else 30
+                
+                await interaction.followup.send(
+                    f"**Server Settings for {interaction.guild.name}**\n\n"
+                    f"{excluded_text}\n\n"
+                    f"**Message Retention:** {retention_days} days",
+                    ephemeral=True
+                )
             
             elif action == "exclude_channel":
                 if not channel:
                     await interaction.followup.send("Please specify a channel to exclude.", ephemeral=True)
                     return
                 
-                excluded = Config.get_excluded_channel_ids()
+                excluded = await server_settings_client.get_excluded_channels(server_id)
                 if channel.id in excluded:
                     await interaction.followup.send(f"{channel.mention} is already excluded.", ephemeral=True)
                 else:
-                    excluded.append(channel.id)
-                    Config.EXCLUDED_CHANNELS = [str(ch_id) for ch_id in excluded]
+                    await server_settings_client.add_excluded_channel(server_id, channel.id)
                     
                     await interaction.followup.send(
-                        f"✅ {channel.mention} has been excluded from indexing.",
+                        f"✅ {channel.mention} has been excluded from indexing in this server.",
                         ephemeral=True
                     )
-                    logger.info(f"Channel {channel.id} excluded by {interaction.user}")
+                    logger.info(f"Channel {channel.id} excluded in server {server_id} by {interaction.user}")
             
             elif action == "include_channel":
                 if not channel:
                     await interaction.followup.send("Please specify a channel to include.", ephemeral=True)
                     return
                 
-                excluded = Config.get_excluded_channel_ids()
+                excluded = await server_settings_client.get_excluded_channels(server_id)
                 if channel.id not in excluded:
                     await interaction.followup.send(f"{channel.mention} is not excluded.", ephemeral=True)
                 else:
-                    excluded.remove(channel.id)
-                    Config.EXCLUDED_CHANNELS = [str(ch_id) for ch_id in excluded]
+                    await server_settings_client.remove_excluded_channel(server_id, channel.id)
                     
                     await interaction.followup.send(
-                        f"✅ {channel.mention} has been included for indexing.",
+                        f"✅ {channel.mention} has been included for indexing in this server.",
                         ephemeral=True
                     )
-                    logger.info(f"Channel {channel.id} included by {interaction.user}")
+                    logger.info(f"Channel {channel.id} included in server {server_id} by {interaction.user}")
         
         except Exception as e:
             logger.error(f"Error in settings command: {e}")

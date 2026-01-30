@@ -5,13 +5,13 @@ from config import Config
 from database.queries import store_message_with_embedding
 from ai.embeddings import generate_embedding
 from utils.cleanup import cleanup_old_messages, get_storage_stats
+from database.server_settings import server_settings_client
 
 logger = get_logger(__name__)
 
 class BotEvents:
     def __init__(self, bot):
         self.bot = bot
-        self.excluded_channels = Config.get_excluded_channel_ids()
         self.cleanup_task_started = False
     
     async def on_ready(self):
@@ -60,8 +60,9 @@ class BotEvents:
         if not message.guild:
             return
         
-        if message.channel.id in self.excluded_channels:
-            logger.debug(f"Skipping message from excluded channel {message.channel.id}")
+        excluded_channels = await server_settings_client.get_excluded_channels(message.guild.id)
+        if message.channel.id in excluded_channels:
+            logger.debug(f"Skipping message from excluded channel {message.channel.id} in server {message.guild.id}")
             return
         
         if not message.content or message.content.strip() == "":
