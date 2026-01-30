@@ -1,0 +1,25 @@
+services:
+  - type: worker
+    name: discord-ai-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: SUPABASE_PROJECT_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: EXCLUDED_CHANNELS
+        value: ""
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MESSAGE_RETENTION_DAYS
+        value: "30"
+      - key: CLEANUP_INTERVAL_HOURS
+        value: "24"
