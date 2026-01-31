@@ -33,6 +33,7 @@ async def search_with_context(query_embedding, server_id, filters=None):
         author_id = filters.get('author_id') if filters else None
         time_range = filters.get('time_range') if filters else None
         channel_id = filters.get('channel_id') if filters else None
+        thread_id = filters.get('thread_id') if filters else None
         min_length = filters.get('min_length') if filters else None
         limit = filters.get('limit', 20) if filters else 20
         
@@ -42,6 +43,7 @@ async def search_with_context(query_embedding, server_id, filters=None):
             author_id=author_id,
             time_range=time_range,
             channel_id=channel_id,
+            thread_id=thread_id,
             limit=limit
         )
         

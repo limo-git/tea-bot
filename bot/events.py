@@ -72,10 +72,17 @@ class BotEvents:
             return
         
         try:
+            # Check if message is in a thread
+            is_thread = isinstance(message.channel, discord.Thread)
+            thread_id = message.channel.id if is_thread else None
+            parent_channel_id = message.channel.parent_id if is_thread else message.channel.id
+            
             message_data = {
                 'message_id': message.id,
                 'server_id': message.guild.id,
-                'channel_id': message.channel.id,
+                'channel_id': parent_channel_id,
+                'thread_id': thread_id,
+                'is_thread_message': is_thread,
                 'author_id': message.author.id,
                 'author_name': str(message.author),
                 'content': message.content,

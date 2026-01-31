@@ -6,6 +6,7 @@ from utils.conversation_context import conversation_context
 from utils.analytics import analytics
 from utils.embed_builder import embed_builder
 from utils.pagination import PaginationView
+from utils.suggestions import smart_suggestions
 from ai.embeddings import generate_query_embedding
 from ai.gemini_client import gemini_client
 from ai.prompts import get_prompt_for_query, format_messages_for_ai, RECAP_PROMPT
@@ -52,6 +53,7 @@ class BotCommands:
         interaction: discord.Interaction, 
         query: str,
         in_channel: discord.TextChannel = None,
+        in_thread: discord.Thread = None,
         from_date: str = None,
         to_date: str = None,
         min_length: int = None
@@ -116,6 +118,8 @@ class BotCommands:
                 logger.info(f"Filtering by time range: {time_range}")
             if in_channel:
                 logger.info(f"Filtering by channel: {in_channel}")
+            if in_thread:
+                logger.info(f"Filtering by thread: {in_thread}")
             if min_length:
                 logger.info(f"Filtering by min length: {min_length}")
             
@@ -132,6 +136,7 @@ class BotCommands:
                 'author_id': mentioned_user.id if mentioned_user else None,
                 'time_range': time_range,
                 'channel_id': in_channel.id if in_channel else None,
+                'thread_id': in_thread.id if in_thread else None,
                 'min_length': min_length,
                 'limit': 20
             }
@@ -209,6 +214,8 @@ class BotCommands:
                 active_filters = []
                 if in_channel:
                     active_filters.append(f"Channel: {in_channel.mention}")
+                if in_thread:
+                    active_filters.append(f"Thread: {in_thread.mention}")
                 if from_date or to_date:
                     date_range = f"{from_date or '...'} to {to_date or '...'}"
                     active_filters.append(f"Dates: {date_range}")
@@ -221,6 +228,24 @@ class BotCommands:
                         value="\n".join(active_filters),
                         inline=True
                     )
+                
+                # Generate and add smart suggestions
+                try:
+                    suggestions = await smart_suggestions.generate_suggestions(
+                        query=query,
+                        messages=messages,
+                        mentioned_user=mentioned_user
+                    )
+                    
+                    if suggestions:
+                        suggestions_text = "\n".join([f"• {s}" for s in suggestions[:5]])
+                        embeds[-1].add_field(  # Add to last embed
+                            name="💡 You might also ask:",
+                            value=suggestions_text,
+                            inline=False
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to generate suggestions: {e}")
             
             # Send with pagination if multiple embeds
             if len(embeds) > 1:
@@ -737,6 +762,7 @@ def setup_commands(bot):
     @app_commands.describe(
         query="Your question (e.g., 'what did @user talk about yesterday?')",
         in_channel="Optional: Search only in this channel",
+        in_thread="Optional: Search only in this thread",
         from_date="Optional: Start date (YYYY-MM-DD)",
         to_date="Optional: End date (YYYY-MM-DD)",
         min_length="Optional: Minimum message length in characters"
@@ -745,11 +771,12 @@ def setup_commands(bot):
         interaction: discord.Interaction, 
         query: str,
         in_channel: discord.TextChannel = None,
+        in_thread: discord.Thread = None,
         from_date: str = None,
         to_date: str = None,
         min_length: int = None
     ):
-        await commands.ask_command(interaction, query, in_channel, from_date, to_date, min_length)
+        await commands.ask_command(interaction, query, in_channel, in_thread, from_date, to_date, min_length)
     
     @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
     @app_commands.describe(

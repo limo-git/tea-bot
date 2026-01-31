@@ -76,7 +76,7 @@ class SupabaseClient:
             logger.error(f"Error in semantic search: {e}")
             return []
     
-    async def semantic_search_filtered(self, embedding, server_id, author_id=None, time_range=None, channel_id=None, limit=20):
+    async def semantic_search_filtered(self, embedding, server_id, author_id=None, time_range=None, channel_id=None, thread_id=None, limit=20):
         try:
             query = self.client.table('messages').select('*').eq('server_id', server_id)
             
@@ -85,6 +85,9 @@ class SupabaseClient:
             
             if channel_id:
                 query = query.eq('channel_id', channel_id)
+            
+            if thread_id:
+                query = query.eq('thread_id', thread_id)
             
             if time_range:
                 start_time, end_time = time_range
