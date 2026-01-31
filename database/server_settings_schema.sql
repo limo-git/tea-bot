@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS server_settings (
     server_name TEXT,
     excluded_channels BIGINT[] DEFAULT '{}',
     retention_days INTEGER DEFAULT 30,
+    bot_persona TEXT DEFAULT 'You are a helpful Discord assistant. Be friendly, concise, and informative.',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -1,32 +1,42 @@
-SUMMARY_PROMPT = """You are a Discord conversation summarizer. Given the following messages from {user}, provide a concise summary of their key points, topics discussed, and notable quotes. Keep it under 200 words and conversational.
+SUMMARY_PROMPT = """{persona}
+
+The user {requester} wants to know about messages from {target_user}. Provide a concise summary of their key points, topics discussed, and notable quotes. Keep it under 200 words and conversational. Address {requester} directly.
 
 Messages:
 {messages}
 
-Summary:"""
+Summary for {requester}:"""
 
-EXAMPLES_PROMPT = """You are a Discord message curator. Given the query '{query}' and these messages from {user}, select and format 5-10 of the most relevant examples. Include timestamps and keep each example to 1-2 lines.
+EXAMPLES_PROMPT = """{persona}
 
-Messages:
-{messages}
+{requester} asked: '{query}'
 
-Relevant Examples:"""
-
-RECAP_PROMPT = """You are a Discord recap assistant. Summarize the key discussions, decisions, and highlights from these messages. Organize by topic if applicable. Keep it clear and actionable.
+From these messages by {target_user}, select and format 5-10 of the most relevant examples for {requester}. Include timestamps and keep each example to 1-2 lines.
 
 Messages:
 {messages}
 
-Recap:"""
+Relevant Examples for {requester}:"""
 
-GENERAL_QUERY_PROMPT = """You are a helpful Discord assistant. Based on the following messages, answer the user's question: "{query}"
+RECAP_PROMPT = """{persona}
 
-Provide a clear, concise answer based on the message context. If the messages don't contain relevant information, say so.
+{requester} wants a recap of recent activity. Summarize the key discussions, decisions, and highlights from these messages. Organize by topic if applicable. Keep it clear and actionable. Address {requester} directly.
 
 Messages:
 {messages}
 
-Answer:"""
+Recap for {requester}:"""
+
+GENERAL_QUERY_PROMPT = """{persona}
+
+The user {user_name} is asking: "{query}"
+
+Based on the following messages from this Discord server, provide a helpful answer directly to {user_name}. If the messages don't contain relevant information, let them know.
+
+Messages:
+{messages}
+
+Answer (speak directly to {user_name}):"""
 
 def format_messages_for_ai(messages):
     formatted = []
@@ -39,16 +49,38 @@ def format_messages_for_ai(messages):
     
     return "\n".join(formatted)
 
-def get_prompt_for_query(query, messages, user_name=None):
+def get_prompt_for_query(query, messages, user_name=None, requester_name=None, persona=None):
     formatted_messages = format_messages_for_ai(messages)
+    
+    if persona is None:
+        persona = "You are a helpful Discord assistant. Be friendly, concise, and informative."
+    
+    if requester_name is None:
+        requester_name = "the user"
     
     query_lower = query.lower()
     
     if any(word in query_lower for word in ['summary', 'summarize', 'what did', 'tell me about']):
-        return SUMMARY_PROMPT.format(user=user_name or "the user", messages=formatted_messages)
+        return SUMMARY_PROMPT.format(
+            persona=persona,
+            requester=requester_name,
+            target_user=user_name or "the user",
+            messages=formatted_messages
+        )
     
     elif any(word in query_lower for word in ['example', 'show me', 'find']):
-        return EXAMPLES_PROMPT.format(query=query, user=user_name or "the user", messages=formatted_messages)
+        return EXAMPLES_PROMPT.format(
+            persona=persona,
+            requester=requester_name,
+            query=query,
+            target_user=user_name or "the user",
+            messages=formatted_messages
+        )
     
     else:
-        return GENERAL_QUERY_PROMPT.format(query=query, messages=formatted_messages)
+        return GENERAL_QUERY_PROMPT.format(
+            persona=persona,
+            user_name=requester_name,
+            query=query,
+            messages=formatted_messages
+        )

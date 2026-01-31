@@ -66,5 +66,24 @@ class ServerSettingsClient:
         except Exception as e:
             logger.error(f"Error removing excluded channel: {e}")
             return []
+    
+    async def get_bot_persona(self, server_id):
+        try:
+            settings = await self.get_server_settings(server_id)
+            if settings and 'bot_persona' in settings:
+                return settings['bot_persona']
+            return 'You are a helpful Discord assistant. Be friendly, concise, and informative.'
+        except Exception as e:
+            logger.error(f"Error getting bot persona: {e}")
+            return 'You are a helpful Discord assistant. Be friendly, concise, and informative.'
+    
+    async def set_bot_persona(self, server_id, persona):
+        try:
+            await self.update_server_settings(server_id, {'bot_persona': persona})
+            logger.info(f"Updated bot persona for server {server_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error setting bot persona: {e}")
+            return False
 
 server_settings_client = ServerSettingsClient()

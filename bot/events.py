@@ -6,6 +6,7 @@ from database.queries import store_message_with_embedding
 from ai.embeddings import generate_embedding
 from utils.cleanup import cleanup_old_messages, get_storage_stats
 from database.server_settings import server_settings_client
+from database.feedback_client import feedback_client
 
 logger = get_logger(__name__)
 
@@ -13,6 +14,7 @@ class BotEvents:
     def __init__(self, bot):
         self.bot = bot
         self.cleanup_task_started = False
+        self.bot_responses = {}  # Track bot responses for feedback
     
     async def on_ready(self):
         logger.info(f'Bot logged in as {self.bot.user.name} (ID: {self.bot.user.id})')
@@ -96,6 +98,68 @@ class BotEvents:
         
         except Exception as e:
             logger.error(f"Error processing message {message.id}: {e}")
+    
+    async def on_reaction_add(self, reaction: discord.Reaction, user: discord.User):
+        """Handle reactions to bot messages for feedback."""
+        if user.bot:
+            return
+        
+        # Check if this is a reaction to a bot message
+        if reaction.message.author.id != self.bot.user.id:
+            return
+        
+        # Check if this is a feedback reaction
+        if str(reaction.emoji) not in ['👍', '👎']:
+            return
+        
+        try:
+            # Get the response data if we tracked it
+            response_data = self.bot_responses.get(reaction.message.id)
+            
+            if not response_data:
+                logger.debug(f"No tracked response data for message {reaction.message.id}")
+                return
+            
+            feedback_type = 'positive' if str(reaction.emoji) == '👍' else 'negative'
+            
+            await feedback_client.store_feedback(
+                server_id=reaction.message.guild.id,
+                user_id=user.id,
+                message_id=reaction.message.id,
+                query=response_data['query'],
+                response=response_data['response'],
+                feedback_type=feedback_type
+            )
+            
+            logger.info(f"Recorded {feedback_type} feedback from {user} on message {reaction.message.id}")
+            
+            # Send a thank you message
+            if feedback_type == 'positive':
+                await reaction.message.channel.send(
+                    f"Thanks for the feedback, {user.mention}! Glad I could help! 😊",
+                    delete_after=5
+                )
+            else:
+                await reaction.message.channel.send(
+                    f"Thanks for the feedback, {user.mention}. I'll try to do better! 🙏",
+                    delete_after=5
+                )
+        
+        except Exception as e:
+            logger.error(f"Error handling reaction feedback: {e}")
+    
+    def track_response(self, message_id, query, response):
+        """Track a bot response for feedback collection."""
+        self.bot_responses[message_id] = {
+            'query': query,
+            'response': response
+        }
+        
+        # Clean up old tracked responses (keep last 100)
+        if len(self.bot_responses) > 100:
+            oldest_keys = list(self.bot_responses.keys())[:50]
+            for key in oldest_keys:
+                del self.bot_responses[key]
 
 def setup_events(bot):
     events = BotEvents(bot)
@@ -107,3 +171,10 @@ def setup_events(bot):
     @bot.event
     async def on_message(message):
         await events.on_message(message)
+    
+    @bot.event
+    async def on_reaction_add(reaction, user):
+        await events.on_reaction_add(reaction, user)
+    
+    # Make events accessible for tracking responses
+    bot.events = events
