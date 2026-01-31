@@ -1,5 +1,6 @@
 import discord
 from discord import app_commands
+import asyncio
 from utils.logger import get_logger
 from utils.helpers import parse_time_range, extract_user_mention, truncate_text, extract_time_keywords
 from utils.conversation_context import conversation_context
@@ -8,6 +9,7 @@ from utils.embed_builder import embed_builder
 from utils.pagination import PaginationView
 from utils.suggestions import smart_suggestions
 from utils.export_handler import export_handler
+from utils.quiz_generator import quiz_generator
 from ai.embeddings import generate_query_embedding
 from ai.gemini_client import gemini_client
 from ai.prompts import get_prompt_for_query, format_messages_for_ai, RECAP_PROMPT
@@ -772,6 +774,179 @@ class BotCommands:
             )
             await interaction.followup.send(embed=error_embed)
     
+    async def quiz_command(
+        self,
+        interaction: discord.Interaction,
+        num_questions: int = 5,
+        time_period: str = "all"
+    ):
+        """Start a Kahoot-style quiz based on server history."""
+        await interaction.response.defer()
+        
+        try:
+            guild = interaction.guild
+            if not guild:
+                await interaction.followup.send("This command can only be used in a server.")
+                return
+            
+            # Determine time range
+            time_range = None
+            if time_period != "all":
+                time_range = parse_time_range(time_period)
+            
+            # Get messages for quiz generation
+            if time_range:
+                start_time, end_time = time_range
+                messages = await supabase_client.get_messages_by_timerange(
+                    server_id=guild.id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    limit=200
+                )
+            else:
+                # Get recent messages
+                end_time = datetime.utcnow()
+                start_time = end_time - timedelta(days=90)
+                messages = await supabase_client.get_messages_by_timerange(
+                    server_id=guild.id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    limit=200
+                )
+            
+            if not messages or len(messages) < 10:
+                embed = discord.Embed(
+                    title="🎮 Quiz Generator",
+                    description="Not enough messages to generate a quiz. Need at least 10 messages in the selected time period.",
+                    color=discord.Color.orange()
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            # Generate quiz
+            status_embed = discord.Embed(
+                title="🎮 Generating Quiz...",
+                description=f"Creating {num_questions} questions from {len(messages)} messages...",
+                color=discord.Color.blue()
+            )
+            status_msg = await interaction.followup.send(embed=status_embed)
+            
+            questions, error = await quiz_generator.generate_quiz(messages, num_questions)
+            
+            if error or not questions:
+                error_embed = embed_builder.create_error_embed(
+                    error or "Failed to generate quiz questions.",
+                    interaction.user
+                )
+                await status_msg.edit(embed=error_embed)
+                return
+            
+            # Start quiz
+            await self._run_quiz(interaction, questions, status_msg)
+            
+        except Exception as e:
+            logger.error(f"Error in quiz command: {e}")
+            error_embed = embed_builder.create_error_embed(
+                "An error occurred while generating the quiz.",
+                interaction.user
+            )
+            await interaction.followup.send(embed=error_embed)
+    
+    async def _run_quiz(self, interaction, questions, status_msg):
+        """Run the quiz with questions."""
+        try:
+            scores = {}
+            
+            for i, question in enumerate(questions, 1):
+                # Create question embed
+                embed = discord.Embed(
+                    title=f"🎮 Question {i}/{len(questions)}",
+                    description=question['question'],
+                    color=discord.Color.gold()
+                )
+                
+                options_text = "\n".join([
+                    f"**{chr(65+j)})** {opt}"
+                    for j, opt in enumerate(question['options'])
+                ])
+                embed.add_field(name="Options:", value=options_text, inline=False)
+                embed.add_field(name="⏱️", value="You have 20 seconds to answer!", inline=False)
+                embed.set_footer(text=f"React with 🅰️ 🅱️ ©️ or 🇩 to answer!")
+                
+                await status_msg.edit(embed=embed)
+                
+                # Add reaction options
+                reactions = ['🅰️', '🅱️', '©️', '🇩']
+                for reaction in reactions:
+                    await status_msg.add_reaction(reaction)
+                
+                # Wait for answers (20 seconds)
+                await asyncio.sleep(20)
+                
+                # Fetch message to get reactions
+                status_msg = await status_msg.channel.fetch_message(status_msg.id)
+                
+                # Check answers
+                correct_emoji = reactions[ord(question['correct']) - ord('A')]
+                
+                for reaction in status_msg.reactions:
+                    if str(reaction.emoji) in reactions:
+                        users = [user async for user in reaction.users() if not user.bot]
+                        
+                        for user in users:
+                            if user.id not in scores:
+                                scores[user.id] = {'name': user.display_name, 'score': 0}
+                            
+                            if str(reaction.emoji) == correct_emoji:
+                                scores[user.id]['score'] += 1
+                
+                # Show answer
+                answer_embed = discord.Embed(
+                    title=f"✅ Answer for Question {i}",
+                    description=f"**Correct Answer:** {question['correct']}) {question['options'][ord(question['correct']) - ord('A')]}",
+                    color=discord.Color.green()
+                )
+                answer_embed.add_field(
+                    name="Explanation:",
+                    value=question['explanation'],
+                    inline=False
+                )
+                
+                await status_msg.clear_reactions()
+                await status_msg.edit(embed=answer_embed)
+                await asyncio.sleep(5)
+            
+            # Show final scores
+            if scores:
+                sorted_scores = sorted(scores.items(), key=lambda x: x[1]['score'], reverse=True)
+                
+                leaderboard_embed = discord.Embed(
+                    title="🏆 Quiz Complete - Leaderboard",
+                    description=f"Results for {len(questions)} questions",
+                    color=discord.Color.gold()
+                )
+                
+                for rank, (user_id, data) in enumerate(sorted_scores[:10], 1):
+                    medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"{rank}."
+                    leaderboard_embed.add_field(
+                        name=f"{medal} {data['name']}",
+                        value=f"**{data['score']}/{len(questions)}** correct ({int(data['score']/len(questions)*100)}%)",
+                        inline=False
+                    )
+                
+                leaderboard_embed.set_footer(text=f"Quiz created by {interaction.user.display_name}")
+                await status_msg.edit(embed=leaderboard_embed)
+            else:
+                no_players_embed = discord.Embed(
+                    title="🎮 Quiz Complete",
+                    description="No one participated in the quiz!",
+                    color=discord.Color.orange()
+                )
+                await status_msg.edit(embed=no_players_embed)
+            
+        except Exception as e:
+            logger.error(f"Error running quiz: {e}")
+    
     async def timemachine_command(self, interaction: discord.Interaction, date: str):
         """Show what happened on this day in previous years."""
         await interaction.response.defer()
@@ -1108,3 +1283,24 @@ def setup_commands(bot):
     @app_commands.describe(date="Date to look back on (MM-DD or YYYY-MM-DD)")
     async def timemachine(interaction: discord.Interaction, date: str):
         await commands.timemachine_command(interaction, date)
+    
+    @bot.tree.command(name="quiz", description="Start a Kahoot-style quiz based on server history")
+    @app_commands.describe(
+        num_questions="Number of questions (3-10)",
+        time_period="Time period for quiz content"
+    )
+    @app_commands.choices(time_period=[
+        app_commands.Choice(name="All Time", value="all"),
+        app_commands.Choice(name="Last 7 days", value="7d"),
+        app_commands.Choice(name="Last 30 days", value="30d"),
+        app_commands.Choice(name="Last 90 days", value="90d")
+    ])
+    async def quiz(
+        interaction: discord.Interaction,
+        num_questions: int = 5,
+        time_period: str = "all"
+    ):
+        if num_questions < 3 or num_questions > 10:
+            await interaction.response.send_message("Number of questions must be between 3 and 10.", ephemeral=True)
+            return
+        await commands.quiz_command(interaction, num_questions, time_period)
