@@ -1,70 +1,147 @@
-# TeaL;DR Website
+# TeaL;DR
 
-Official website for TeaL;DR Discord AI Search Bot.
+> Transform Discord conversations into searchable knowledge with AI-powered semantic search.
 
-## Getting Started
+Never lose track of important conversations again. TeaL;DR brings powerful AI-driven search to your Discord server, making every message instantly findable.
 
-Install dependencies:
+## 🚀 What is TeaL;DR?
 
-```bash
-npm install
+TeaL;DR is a Discord bot that helps you search through your server's message history using natural language. Instead of scrolling endlessly or trying to remember exact keywords, just ask the bot what you're looking for in plain English.
+
+**Example:**
+- "What did we decide about the API yesterday?"
+- "Show me bug reports from last week"
+- "What did @john say about the deployment?"
+
+## ✨ Key Features
+
+### 🔍 **Smart Search**
+Search your server using natural language. The bot understands context and meaning, not just keywords.
+
+### 📝 **Conversation Summaries**
+Get AI-generated recaps of discussions. Perfect for catching up after being away.
+
+### 📊 **Server Analytics**
+View statistics about server activity, trending topics, and user engagement.
+
+### 📤 **Data Export**
+Export search results to CSV, JSON, Markdown, or plain text for analysis.
+
+### 🎮 **Interactive Features**
+- **Quiz:** Kahoot-style trivia games from your server history
+- **Wrapped:** Spotify-style yearly summaries
+- **Time Machine:** See what happened on this day in previous years
+
+### 🔒 **Privacy First**
+- Complete data isolation between servers
+- Automatic message deletion after 30 days (configurable)
+- Exclude sensitive channels from indexing
+- GDPR compliant
+
+## 🎯 Perfect For
+
+- **Work Servers:** Find past decisions, action items, and discussions
+- **Community Servers:** Track conversations and engage members
+- **Study Groups:** Search through notes and resources
+- **Gaming Communities:** Recall strategies and event planning
+- **Any Server:** Where conversations matter
+
+## 📋 Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ask` | Search through server history with natural language |
+| `/recap` | Get AI summaries of conversations over time |
+| `/stats` | View server analytics and activity statistics |
+| `/export` | Export search results to various formats |
+| `/quiz` | Create trivia games from server history |
+| `/wrapped` | Generate yearly server summaries |
+| `/timemachine` | See what happened on this day in past years |
+| `/settings` | Configure bot behavior (Admin only) |
+| `/customize` | Set bot personality (Admin only) |
+| `/clear` | Clear your conversation context |
+| `/help` | Show all available commands |
+
+## 🚀 Getting Started
+
+### 1. Add to Your Server
+
+Click the button below to invite TeaL;DR to your Discord server:
+
+**[Add to Discord](https://discord.com/api/oauth2/authorize?client_id=1466768259369013333&permissions=274877959168&scope=bot%20applications.commands)**
+
+### 2. Wait for Indexing
+
+The bot will automatically start indexing recent messages. This takes a few minutes for the initial setup.
+
+### 3. Try Your First Search
+
+```
+/ask query: what did we discuss about the project?
 ```
 
-Run the development server:
+That's it! You're ready to go.
 
-```bash
-npm run dev
+## 📖 Documentation
+
+Visit our [comprehensive documentation](https://tealdr.vercel.app/docs) for:
+- Detailed command guides
+- Configuration options
+- Best practices
+- Troubleshooting
+
+## 💡 Example Use Cases
+
+### Finding Past Decisions
+```
+/ask query: why did we choose PostgreSQL over MongoDB?
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Build for Production
-
-```bash
-npm run build
-npm start
+### Catching Up on Discussions
+```
+/recap period: Last 7 days channel: #general
 ```
 
-## Deploy
-
-This Next.js app can be deployed to:
-- Vercel (recommended)
-- Netlify
-- Any Node.js hosting platform
-
-### Deploy to Vercel
-
-```bash
-npm install -g vercel
-vercel
+### Tracking Action Items
+```
+/ask query: who was assigned to fix the login bug?
 ```
 
-## Tech Stack
+### Exporting Data
+```
+/export query: feature requests format: CSV
+```
 
-- **Next.js 14** - React framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **Framer Motion** - Animations
-- **Custom fonts** - JetBrains Mono, Space Mono, Outfit
+## 🔐 Privacy & Security
 
-## Features
+- **Data Isolation:** Your server's data is never shared with other servers
+- **Automatic Deletion:** Messages are deleted after 30 days by default
+- **Channel Control:** Exclude sensitive channels from indexing
+- **No Training:** Your data is never used to train AI models
+- **Transparent:** Full privacy policy available on our website
 
-- ✅ Responsive design
-- ✅ Dark theme with custom color palette
-- ✅ Smooth animations and transitions
-- ✅ Command reference with examples
-- ✅ Terms of Service page
-- ✅ Privacy Policy page
-- ✅ SEO optimized
+## 🤝 Support
 
-## Customization
+Need help? We're here for you:
 
-Update the Discord OAuth2 link in:
-- `src/components/Navigation.tsx`
-- `src/app/page.tsx`
+- 📧 Email: support@tealdr.com
+- 🐙 GitHub: [github.com/limo-git/tea-bot](https://github.com/limo-git/tea-bot)
+- 💬 Discord: [Join our support server](https://discord.gg/T8VTnDWSKp)
+- 🐦 Twitter: [@limo_ew](https://x.com/limo_ew)
 
-Replace `YOUR_CLIENT_ID` with your actual Discord bot client ID.
+## ☕ Support Development
 
-## License
+Help keep TeaL;DR running and support future development:
 
-MIT
+**[Buy Me a Coffee](https://www.buymeacoffee.com/YOUR_USERNAME)**
+
+## 📜 Legal
+
+- [Terms of Service](https://tealdr.vercel.app/terms)
+- [Privacy Policy](https://tealdr.vercel.app/privacy)
+
+---
+
+Made with ❤️ for Discord communities everywhere
+
+© 2026 TeaL;DR. All rights reserved.
