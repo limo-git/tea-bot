@@ -7,6 +7,7 @@ from utils.analytics import analytics
 from utils.embed_builder import embed_builder
 from utils.pagination import PaginationView
 from utils.suggestions import smart_suggestions
+from utils.export_handler import export_handler
 from ai.embeddings import generate_query_embedding
 from ai.gemini_client import gemini_client
 from ai.prompts import get_prompt_for_query, format_messages_for_ai, RECAP_PROMPT
@@ -656,6 +657,233 @@ class BotCommands:
             logger.error(f"Error in help command: {e}")
             await interaction.followup.send("An error occurred while showing help.", ephemeral=True)
     
+    async def export_command(
+        self,
+        interaction: discord.Interaction,
+        query: str,
+        format: str,
+        in_channel: discord.TextChannel = None,
+        in_thread: discord.Thread = None,
+        from_date: str = None,
+        to_date: str = None
+    ):
+        """Export search results to a file."""
+        await interaction.response.defer()
+        
+        try:
+            guild = interaction.guild
+            if not guild:
+                await interaction.followup.send("This command can only be used in a server.")
+                return
+            
+            # Perform search with same logic as ask command
+            mentioned_user = extract_user_mention(query, guild)
+            time_keyword = extract_time_keywords(query)
+            time_range = parse_time_range(time_keyword) if time_keyword else None
+            
+            # Parse date filters if provided
+            if from_date or to_date:
+                try:
+                    start_time = datetime.fromisoformat(from_date) if from_date else None
+                    end_time = datetime.fromisoformat(to_date) if to_date else None
+                    
+                    if start_time or end_time:
+                        time_range = (start_time, end_time)
+                except ValueError:
+                    error_embed = embed_builder.create_error_embed(
+                        "Invalid date format. Please use YYYY-MM-DD format.",
+                        interaction.user
+                    )
+                    await interaction.followup.send(embed=error_embed)
+                    return
+            
+            query_embedding = await generate_query_embedding(query)
+            if not query_embedding:
+                error_embed = embed_builder.create_error_embed(
+                    "Failed to process your query. Please try again.",
+                    interaction.user
+                )
+                await interaction.followup.send(embed=error_embed)
+                return
+            
+            filters = {
+                'author_id': mentioned_user.id if mentioned_user else None,
+                'time_range': time_range,
+                'channel_id': in_channel.id if in_channel else None,
+                'thread_id': in_thread.id if in_thread else None,
+                'limit': 100  # Export more messages
+            }
+            
+            messages = await search_with_context(
+                query_embedding=query_embedding,
+                server_id=guild.id,
+                filters=filters
+            )
+            
+            if not messages or len(messages) == 0:
+                no_results_embed = embed_builder.create_no_results_embed(query, interaction.user)
+                await interaction.followup.send(embed=no_results_embed)
+                return
+            
+            # Export based on format
+            file_buffer = None
+            filename = None
+            
+            if format == "json":
+                file_buffer, filename = await export_handler.export_to_json(messages, query, interaction.user)
+            elif format == "csv":
+                file_buffer, filename = await export_handler.export_to_csv(messages, query, interaction.user)
+            elif format == "markdown":
+                file_buffer, filename = await export_handler.export_to_markdown(messages, query, interaction.user)
+            elif format == "txt":
+                file_buffer, filename = await export_handler.export_to_txt(messages, query, interaction.user)
+            
+            if not file_buffer or not filename:
+                error_embed = embed_builder.create_error_embed(
+                    "Failed to generate export file. Please try again.",
+                    interaction.user
+                )
+                await interaction.followup.send(embed=error_embed)
+                return
+            
+            # Create success embed
+            export_embed = discord.Embed(
+                title="📤 Export Complete",
+                description=f"Successfully exported {len(messages)} messages",
+                color=discord.Color.green()
+            )
+            export_embed.add_field(name="Query", value=f"`{query}`", inline=False)
+            export_embed.add_field(name="Format", value=format.upper(), inline=True)
+            export_embed.add_field(name="Messages", value=str(len(messages)), inline=True)
+            export_embed.set_footer(text=f"Exported by {interaction.user.display_name}")
+            
+            # Send file
+            file_buffer.seek(0)
+            discord_file = discord.File(fp=file_buffer, filename=filename)
+            
+            await interaction.followup.send(embed=export_embed, file=discord_file)
+            logger.info(f"Exported {len(messages)} messages to {format} for {interaction.user}")
+            
+        except Exception as e:
+            logger.error(f"Error in export command: {e}")
+            error_embed = embed_builder.create_error_embed(
+                "An error occurred while exporting. Please try again.",
+                interaction.user
+            )
+            await interaction.followup.send(embed=error_embed)
+    
+    async def timemachine_command(self, interaction: discord.Interaction, date: str):
+        """Show what happened on this day in previous years."""
+        await interaction.response.defer()
+        
+        try:
+            guild = interaction.guild
+            if not guild:
+                await interaction.followup.send("This command can only be used in a server.")
+                return
+            
+            # Parse the date
+            try:
+                # Try parsing as MM-DD format
+                target_date = datetime.strptime(date, "%m-%d")
+                month = target_date.month
+                day = target_date.day
+            except ValueError:
+                try:
+                    # Try parsing as full date
+                    target_date = datetime.strptime(date, "%Y-%m-%d")
+                    month = target_date.month
+                    day = target_date.day
+                except ValueError:
+                    error_embed = embed_builder.create_error_embed(
+                        "Invalid date format. Please use MM-DD (e.g., 01-31) or YYYY-MM-DD format.",
+                        interaction.user
+                    )
+                    await interaction.followup.send(embed=error_embed)
+                    return
+            
+            # Query messages from this day in previous years
+            current_year = datetime.utcnow().year
+            years_to_check = [current_year - i for i in range(1, 6)]  # Check last 5 years
+            
+            all_events = []
+            
+            for year in years_to_check:
+                try:
+                    start_date = datetime(year, month, day, 0, 0, 0)
+                    end_date = datetime(year, month, day, 23, 59, 59)
+                    
+                    messages = await supabase_client.get_messages_by_timerange(
+                        server_id=guild.id,
+                        start_time=start_date,
+                        end_time=end_date,
+                        limit=50
+                    )
+                    
+                    if messages:
+                        all_events.append({
+                            'year': year,
+                            'count': len(messages),
+                            'messages': messages[:5]  # Keep top 5
+                        })
+                except:
+                    continue
+            
+            if not all_events:
+                embed = discord.Embed(
+                    title=f"📅 Time Machine - {date}",
+                    description="No historical data found for this date.",
+                    color=discord.Color.orange()
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            # Create embed with historical events
+            embed = discord.Embed(
+                title=f"📅 On This Day - {month}/{day}",
+                description=f"Looking back at what happened on {month}/{day} in previous years...",
+                color=discord.Color.purple(),
+                timestamp=datetime.utcnow()
+            )
+            
+            for event in all_events:
+                year = event['year']
+                count = event['count']
+                messages = event['messages']
+                
+                # Get unique authors
+                authors = set(msg.get('author_name') for msg in messages)
+                author_list = ', '.join(list(authors)[:3])
+                if len(authors) > 3:
+                    author_list += f" and {len(authors) - 3} others"
+                
+                # Sample message
+                sample = messages[0].get('content', '')[:100] if messages else ""
+                
+                field_value = f"**{count} messages**\n"
+                field_value += f"Active: {author_list}\n"
+                if sample:
+                    field_value += f"_{sample}..._"
+                
+                embed.add_field(
+                    name=f"📆 {year} ({current_year - year} year{'s' if current_year - year != 1 else ''} ago)",
+                    value=field_value,
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"Sent time machine for {date} to {interaction.user}")
+            
+        except Exception as e:
+            logger.error(f"Error in timemachine command: {e}")
+            error_embed = embed_builder.create_error_embed(
+                "An error occurred while traveling through time. Please try again.",
+                interaction.user
+            )
+            await interaction.followup.send(embed=error_embed)
+    
     async def stats_command(self, interaction: discord.Interaction, scope: str = "server"):
         """Show server or user statistics."""
         await interaction.response.defer()
@@ -849,3 +1077,34 @@ def setup_commands(bot):
     @bot.tree.command(name="help", description="Show help information about bot commands")
     async def help_cmd(interaction: discord.Interaction):
         await commands.help_command(interaction)
+    
+    @bot.tree.command(name="export", description="Export search results to a file")
+    @app_commands.describe(
+        query="Your search query",
+        format="Export format",
+        in_channel="Optional: Search only in this channel",
+        in_thread="Optional: Search only in this thread",
+        from_date="Optional: Start date (YYYY-MM-DD)",
+        to_date="Optional: End date (YYYY-MM-DD)"
+    )
+    @app_commands.choices(format=[
+        app_commands.Choice(name="JSON", value="json"),
+        app_commands.Choice(name="CSV", value="csv"),
+        app_commands.Choice(name="Markdown", value="markdown"),
+        app_commands.Choice(name="Text", value="txt")
+    ])
+    async def export(
+        interaction: discord.Interaction,
+        query: str,
+        format: str,
+        in_channel: discord.TextChannel = None,
+        in_thread: discord.Thread = None,
+        from_date: str = None,
+        to_date: str = None
+    ):
+        await commands.export_command(interaction, query, format, in_channel, in_thread, from_date, to_date)
+    
+    @bot.tree.command(name="timemachine", description="See what happened on this day in previous years")
+    @app_commands.describe(date="Date to look back on (MM-DD or YYYY-MM-DD)")
+    async def timemachine(interaction: discord.Interaction, date: str):
+        await commands.timemachine_command(interaction, date)
