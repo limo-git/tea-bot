@@ -32,6 +32,8 @@ async def search_with_context(query_embedding, server_id, filters=None):
     try:
         author_id = filters.get('author_id') if filters else None
         time_range = filters.get('time_range') if filters else None
+        channel_id = filters.get('channel_id') if filters else None
+        min_length = filters.get('min_length') if filters else None
         limit = filters.get('limit', 20) if filters else 20
         
         messages = await supabase_client.semantic_search_filtered(
@@ -39,8 +41,13 @@ async def search_with_context(query_embedding, server_id, filters=None):
             server_id=server_id,
             author_id=author_id,
             time_range=time_range,
+            channel_id=channel_id,
             limit=limit
         )
+        
+        # Apply min_length filter if specified
+        if min_length and messages:
+            messages = [msg for msg in messages if len(msg.get('content', '')) >= min_length]
         
         return messages
     except Exception as e:

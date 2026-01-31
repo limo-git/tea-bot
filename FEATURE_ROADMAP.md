@@ -261,59 +261,7 @@ Better handling of Discord threads.
 
 ---
 
-## 🤖 AI Enhancements
 
-### 13. **Multi-Model Support**
-Let users choose AI models.
-
-**Models:**
-- Gemini 2.5 Flash (fast, free)
-- Gemini 1.5 Pro (smarter, paid)
-- Claude (alternative)
-- GPT-4 (alternative)
-
-**Command:**
-```
-/settings action: Set AI Model model: Gemini Pro
-```
-
-**Implementation:**
-- Abstract AI client interface
-- Add model selection to settings
-- Support multiple API providers
-
-**Estimated Time:** 4-5 hours
-
----
-
-### 14. **Sentiment Analysis**
-Analyze conversation tone.
-
-**Features:**
-- Detect positive/negative discussions
-- Flag heated debates
-- Identify celebration moments
-- Track team morale
-
-**Example:**
-```
-/sentiment channel: #general time: Last 7 days
-
-😊 Positive: 65%
-😐 Neutral: 25%
-😟 Negative: 10%
-
-Trending topics:
-• New feature launch 🎉 (very positive)
-• Bug reports 🐛 (slightly negative)
-```
-
-**Implementation:**
-- Use Gemini for sentiment scoring
-- Aggregate sentiment over time
-- Create visualization command
-
-**Estimated Time:** 4-5 hours
 
 ---
 
@@ -378,19 +326,6 @@ Browser-based interface.
 
 **Estimated Time:** 20-30 hours
 
----
-
-### 18. **Mobile App** (Future)
-Dedicated mobile app for searching server history on the go.
-
-**Tech stack:**
-- React Native
-- Expo
-- Discord OAuth
-
-**Estimated Time:** 40-60 hours
-
----
 
 ## 🛡️ Moderation & Safety
 
@@ -439,6 +374,7 @@ Different permissions per role.
 
 ### 21. **Quiz Mode**
 Generate trivia from server history.
+ MAKE IT LIKE KAHOOT BUT FOR THE SERVER HISTORY
 
 ```
 /quiz topic: Server history questions: 10

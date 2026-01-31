@@ -4,6 +4,8 @@ from utils.logger import get_logger
 from utils.helpers import parse_time_range, extract_user_mention, truncate_text, extract_time_keywords
 from utils.conversation_context import conversation_context
 from utils.analytics import analytics
+from utils.embed_builder import embed_builder
+from utils.pagination import PaginationView
 from ai.embeddings import generate_query_embedding
 from ai.gemini_client import gemini_client
 from ai.prompts import get_prompt_for_query, format_messages_for_ai, RECAP_PROMPT
@@ -45,7 +47,15 @@ class BotCommands:
         self.bot = bot
         self.excluded_channels = Config.get_excluded_channel_ids()
     
-    async def ask_command(self, interaction: discord.Interaction, query: str):
+    async def ask_command(
+        self, 
+        interaction: discord.Interaction, 
+        query: str,
+        in_channel: discord.TextChannel = None,
+        from_date: str = None,
+        to_date: str = None,
+        min_length: int = None
+    ):
         if not rate_limiter.check_rate_limit(interaction.user.id):
             await interaction.response.send_message(
                 "You're sending too many requests. Please wait a moment and try again.",
@@ -82,20 +92,47 @@ class BotCommands:
             time_keyword = extract_time_keywords(query)
             time_range = parse_time_range(time_keyword) if time_keyword else None
             
+            # Parse date filters if provided
+            if from_date or to_date:
+                try:
+                    from datetime import datetime
+                    start_time = datetime.fromisoformat(from_date) if from_date else None
+                    end_time = datetime.fromisoformat(to_date) if to_date else None
+                    
+                    if start_time or end_time:
+                        time_range = (start_time, end_time)
+                except ValueError:
+                    error_embed = embed_builder.create_error_embed(
+                        "Invalid date format. Please use YYYY-MM-DD format.",
+                        interaction.user
+                    )
+                    await interaction.followup.send(embed=error_embed)
+                    return
+            
             logger.info(f"Processing query from {interaction.user}: {query}")
             if mentioned_user:
                 logger.info(f"Filtering by user: {mentioned_user}")
             if time_range:
                 logger.info(f"Filtering by time range: {time_range}")
+            if in_channel:
+                logger.info(f"Filtering by channel: {in_channel}")
+            if min_length:
+                logger.info(f"Filtering by min length: {min_length}")
             
             query_embedding = await generate_query_embedding(query)
             if not query_embedding:
-                await interaction.followup.send("Failed to process your query. Please try again.")
+                error_embed = embed_builder.create_error_embed(
+                    "Failed to process your query. Please try again.",
+                    interaction.user
+                )
+                await interaction.followup.send(embed=error_embed)
                 return
             
             filters = {
                 'author_id': mentioned_user.id if mentioned_user else None,
                 'time_range': time_range,
+                'channel_id': in_channel.id if in_channel else None,
+                'min_length': min_length,
                 'limit': 20
             }
             
@@ -106,7 +143,9 @@ class BotCommands:
             )
             
             if not messages or len(messages) == 0:
-                await interaction.followup.send("No messages found matching your query. Try a different time range or user.")
+                # Send no results embed
+                no_results_embed = embed_builder.create_no_results_embed(query, interaction.user)
+                await interaction.followup.send(embed=no_results_embed)
                 return
             
             logger.info(f"Found {len(messages)} relevant messages")
@@ -132,8 +171,6 @@ class BotCommands:
             
             response = await gemini_client.generate_response(prompt)
             
-            response = truncate_text(response, 2000)
-            
             # Save to conversation context
             conversation_context.add_query(
                 user_id=interaction.user.id,
@@ -142,12 +179,56 @@ class BotCommands:
                 mentioned_user=mentioned_user.id if mentioned_user else None
             )
             
-            # Add context indicator if this is a follow-up
-            if has_context:
-                response = f"💬 *Following up from our conversation...*\n\n{response}"
+            # Create rich embed(s) for response
+            embeds = embed_builder.create_paginated_embeds(
+                response=response,
+                query=query,
+                user=interaction.user,
+                base_color=discord.Color.blue()
+            )
             
-            # Send response and add feedback reactions
-            sent_message = await interaction.followup.send(response)
+            # Add context indicator to first embed if follow-up
+            if has_context and embeds:
+                embeds[0].insert_field_at(
+                    0,
+                    name="💬 Context",
+                    value="Following up from previous conversation",
+                    inline=False
+                )
+            
+            # Add message count and filters to first embed
+            if embeds:
+                sources_text = f"{len(messages)} messages analyzed"
+                embeds[0].add_field(
+                    name="📊 Sources",
+                    value=sources_text,
+                    inline=True
+                )
+                
+                # Add active filters info
+                active_filters = []
+                if in_channel:
+                    active_filters.append(f"Channel: {in_channel.mention}")
+                if from_date or to_date:
+                    date_range = f"{from_date or '...'} to {to_date or '...'}"
+                    active_filters.append(f"Dates: {date_range}")
+                if min_length:
+                    active_filters.append(f"Min length: {min_length} chars")
+                
+                if active_filters:
+                    embeds[0].add_field(
+                        name="🔍 Filters",
+                        value="\n".join(active_filters),
+                        inline=True
+                    )
+            
+            # Send with pagination if multiple embeds
+            if len(embeds) > 1:
+                view = PaginationView(embeds, interaction.user)
+                sent_message = await interaction.followup.send(embed=embeds[0], view=view)
+                view.message = sent_message
+            else:
+                sent_message = await interaction.followup.send(embed=embeds[0])
             
             # Track this response for feedback
             self.bot.events.track_response(sent_message.id, query, response)
@@ -160,7 +241,11 @@ class BotCommands:
         
         except Exception as e:
             logger.error(f"Error in ask command: {e}")
-            await interaction.followup.send("Something went wrong on my end. Please try again in a moment.")
+            error_embed = embed_builder.create_error_embed(
+                "Something went wrong while processing your query. Please try again in a moment.",
+                interaction.user
+            )
+            await interaction.followup.send(embed=error_embed)
     
     async def recap_command(
         self,
@@ -214,7 +299,12 @@ class BotCommands:
                 )
             
             if not messages or len(messages) < 5:
-                await interaction.followup.send("Not much activity in this timeframe.")
+                embed = discord.Embed(
+                    title="📅 Recap",
+                    description="Not much activity in this timeframe.",
+                    color=discord.Color.orange()
+                )
+                await interaction.followup.send(embed=embed)
                 return
             
             logger.info(f"Found {len(messages)} messages for recap")
@@ -231,8 +321,7 @@ class BotCommands:
             
             response = await gemini_client.generate_response(prompt)
             
-            response = truncate_text(response, 2000)
-            
+            # Determine location text
             location = ""
             if user:
                 location = f" for {user.mention}"
@@ -241,8 +330,17 @@ class BotCommands:
             else:
                 location = f" in this channel"
             
-            # Send response and add feedback reactions
-            sent_message = await interaction.followup.send(f"**Recap{location} ({time}):**\n\n{response}")
+            # Create rich embed for recap
+            recap_embed = embed_builder.create_recap_embed(
+                time_period=time,
+                response=response,
+                user=interaction.user,
+                location=location,
+                message_count=len(messages)
+            )
+            
+            # Send response with embed
+            sent_message = await interaction.followup.send(embed=recap_embed)
             
             # Track this response for feedback
             self.bot.events.track_response(sent_message.id, f"recap {time}", response)
@@ -255,7 +353,11 @@ class BotCommands:
         
         except Exception as e:
             logger.error(f"Error in recap command: {e}")
-            await interaction.followup.send("Something went wrong on my end. Please try again in a moment.")
+            error_embed = embed_builder.create_error_embed(
+                "Something went wrong while generating the recap. Please try again in a moment.",
+                interaction.user
+            )
+            await interaction.followup.send(embed=error_embed)
     
     async def settings_command(
         self,
@@ -632,9 +734,22 @@ def setup_commands(bot):
     commands = BotCommands(bot)
     
     @bot.tree.command(name="ask", description="Ask a natural language question about server messages")
-    @app_commands.describe(query="Your question (e.g., 'what did @user talk about yesterday?')")
-    async def ask(interaction: discord.Interaction, query: str):
-        await commands.ask_command(interaction, query)
+    @app_commands.describe(
+        query="Your question (e.g., 'what did @user talk about yesterday?')",
+        in_channel="Optional: Search only in this channel",
+        from_date="Optional: Start date (YYYY-MM-DD)",
+        to_date="Optional: End date (YYYY-MM-DD)",
+        min_length="Optional: Minimum message length in characters"
+    )
+    async def ask(
+        interaction: discord.Interaction, 
+        query: str,
+        in_channel: discord.TextChannel = None,
+        from_date: str = None,
+        to_date: str = None,
+        min_length: int = None
+    ):
+        await commands.ask_command(interaction, query, in_channel, from_date, to_date, min_length)
     
     @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
     @app_commands.describe(
