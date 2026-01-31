@@ -2,6 +2,7 @@ from google import genai
 from google.genai import types
 from config import Config
 from utils.logger import get_logger
+from utils.cache_manager import cache_manager
 import asyncio
 
 logger = get_logger(__name__)
@@ -14,17 +15,29 @@ async def generate_embedding(text):
             logger.warning("Empty text provided for embedding")
             return None
         
+        # Check cache first
+        cached_embedding = cache_manager.get_embedding(text)
+        if cached_embedding is not None:
+            logger.debug(f"Using cached embedding for text (length: {len(text)})")
+            return cached_embedding
+        
+        # Generate new embedding
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
             lambda: client.models.embed_content(
                 model="text-embedding-004",
-                contents=text
+                contents=text,
+                config={"task_type": "retrieval_document"}
             )
         )
         
         embedding = result.embeddings[0].values
-        logger.debug(f"Generated embedding for text (length: {len(text)})")
+        
+        # Cache the result
+        cache_manager.set_embedding(text, embedding)
+        
+        logger.debug(f"Generated and cached embedding for text (length: {len(text)})")
         return embedding
     except Exception as e:
         logger.error(f"Error generating embedding: {e}")
@@ -36,17 +49,30 @@ async def generate_query_embedding(text):
             logger.warning("Empty text provided for query embedding")
             return None
         
+        # Check cache first (use different prefix for query embeddings)
+        cache_key = f"query:{text}"
+        cached_embedding = cache_manager.get_embedding(cache_key)
+        if cached_embedding is not None:
+            logger.debug(f"Using cached query embedding for text (length: {len(text)})")
+            return cached_embedding
+        
+        # Generate new embedding
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
             lambda: client.models.embed_content(
                 model="text-embedding-004",
-                contents=text
+                contents=text,
+                config={"task_type": "retrieval_query"}
             )
         )
         
         embedding = result.embeddings[0].values
-        logger.debug(f"Generated query embedding for text (length: {len(text)})")
+        
+        # Cache the result
+        cache_manager.set_embedding(cache_key, embedding)
+        
+        logger.debug(f"Generated and cached query embedding for text (length: {len(text)})")
         return embedding
     except Exception as e:
         logger.error(f"Error generating query embedding: {e}")

@@ -12,6 +12,7 @@ from utils.export_handler import export_handler
 from utils.quiz_generator import quiz_generator
 from utils.yearly_wrapped import yearly_wrapped
 from utils.auto_tagger import auto_tagger
+from utils.cache_manager import cache_manager
 from ai.embeddings import generate_query_embedding
 from ai.gemini_client import gemini_client
 from ai.prompts import get_prompt_for_query, format_messages_for_ai, RECAP_PROMPT
@@ -1218,6 +1219,17 @@ class BotCommands:
                     embed.add_field(
                         name="🏆 Most Active Users",
                         value="\n".join(top_users_text),
+                        inline=False
+                    )
+                
+                # Add cache statistics
+                cache_stats = cache_manager.get_stats_summary()
+                if cache_stats['total_requests'] > 0:
+                    embed.add_field(
+                        name="⚡ Cache Performance",
+                        value=f"**Hit Rate:** {cache_stats['hit_rate']:.1f}%\n"
+                              f"**Hits:** {cache_stats['hits']} | **Misses:** {cache_stats['misses']}\n"
+                              f"**Cached Items:** {cache_stats['embedding_cache_size']} embeddings, {cache_stats['response_cache_size']} responses",
                         inline=False
                     )
                 
