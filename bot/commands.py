@@ -10,6 +10,8 @@ from utils.pagination import PaginationView
 from utils.suggestions import smart_suggestions
 from utils.export_handler import export_handler
 from utils.quiz_generator import quiz_generator
+from utils.yearly_wrapped import yearly_wrapped
+from utils.auto_tagger import auto_tagger
 from ai.embeddings import generate_query_embedding
 from ai.gemini_client import gemini_client
 from ai.prompts import get_prompt_for_query, format_messages_for_ai, RECAP_PROMPT
@@ -947,6 +949,109 @@ class BotCommands:
         except Exception as e:
             logger.error(f"Error running quiz: {e}")
     
+    async def wrapped_command(self, interaction: discord.Interaction, year: int = None):
+        """Generate Spotify Wrapped-style year-end summary."""
+        await interaction.response.defer()
+        
+        try:
+            guild = interaction.guild
+            if not guild:
+                await interaction.followup.send("This command can only be used in a server.")
+                return
+            
+            if year is None:
+                year = datetime.utcnow().year - 1
+            
+            # Validate year
+            current_year = datetime.utcnow().year
+            if year > current_year or year < 2020:
+                error_embed = embed_builder.create_error_embed(
+                    f"Invalid year. Please choose a year between 2020 and {current_year}.",
+                    interaction.user
+                )
+                await interaction.followup.send(embed=error_embed)
+                return
+            
+            # Generate wrapped
+            status_embed = discord.Embed(
+                title=f"🎊 Generating {year} Wrapped...",
+                description="Analyzing server activity and creating your year-end summary...",
+                color=discord.Color.purple()
+            )
+            status_msg = await interaction.followup.send(embed=status_embed)
+            
+            wrapped_data, error = await yearly_wrapped.generate_wrapped(supabase_client, guild.id, year)
+            
+            if error or not wrapped_data:
+                error_embed = embed_builder.create_error_embed(
+                    error or "Failed to generate wrapped summary.",
+                    interaction.user
+                )
+                await status_msg.edit(embed=error_embed)
+                return
+            
+            # Create wrapped embed
+            stats = wrapped_data['stats']
+            
+            embed = discord.Embed(
+                title=f"🎊 {guild.name}'s {year} Wrapped",
+                description=wrapped_data['summary'],
+                color=discord.Color.gold()
+            )
+            
+            # Total activity
+            embed.add_field(
+                name="📊 Total Activity",
+                value=f"**{stats['total_messages']:,}** messages\n"
+                      f"**{stats['unique_users']}** active members\n"
+                      f"**{stats['total_characters']:,}** characters typed",
+                inline=False
+            )
+            
+            # Top contributors
+            if stats['top_users']:
+                top_3 = stats['top_users'][:3]
+                top_text = "\n".join([
+                    f"{'🥇' if i==0 else '🥈' if i==1 else '🥉'} **{user}** - {count:,} messages"
+                    for i, (user, count) in enumerate(top_3)
+                ])
+                embed.add_field(
+                    name="🏆 Top Contributors",
+                    value=top_text,
+                    inline=False
+                )
+            
+            # Peak activity
+            embed.add_field(
+                name="📈 Peak Activity",
+                value=f"**Busiest Month:** {stats['most_active_month']} ({stats['most_active_month_count']:,} messages)\n"
+                      f"**Most Active Hour:** {stats['most_active_hour']}:00\n"
+                      f"**Avg Message Length:** {stats['avg_message_length']} characters",
+                inline=False
+            )
+            
+            # Fun fact
+            if stats['longest_message']['length'] > 0:
+                embed.add_field(
+                    name="🎯 Fun Fact",
+                    value=f"Longest message was **{stats['longest_message']['length']}** characters by {stats['longest_message']['author']}!",
+                    inline=False
+                )
+            
+            embed.set_footer(text=f"Generated for {interaction.user.display_name} • {year} Wrapped")
+            embed.timestamp = datetime.utcnow()
+            
+            await status_msg.edit(embed=embed)
+            logger.info(f"Generated {year} wrapped for {guild.name}")
+            
+        except Exception as e:
+            logger.error(f"Error in wrapped command: {e}")
+            error_embed = embed_builder.create_error_embed(
+                "An error occurred while generating your wrapped summary.",
+                interaction.user
+            )
+            await interaction.followup.send(embed=error_embed)
+    
     async def timemachine_command(self, interaction: discord.Interaction, date: str):
         """Show what happened on this day in previous years."""
         await interaction.response.defer()
@@ -1304,3 +1409,8 @@ def setup_commands(bot):
             await interaction.response.send_message("Number of questions must be between 3 and 10.", ephemeral=True)
             return
         await commands.quiz_command(interaction, num_questions, time_period)
+    
+    @bot.tree.command(name="wrapped", description="Generate Spotify Wrapped-style year-end summary")
+    @app_commands.describe(year="Year to generate wrapped for (defaults to last year)")
+    async def wrapped(interaction: discord.Interaction, year: int = None):
+        await commands.wrapped_command(interaction, year)
