@@ -1,11 +1,13 @@
 SUMMARY_PROMPT = """{persona}
 
-The user {requester} wants to know about messages from {target_user}. Provide a concise summary of their key points, topics discussed, and notable quotes. Keep it under 200 words and conversational. Address {requester} directly.
+The user {requester} asked: "{query}"
+
+Based on these messages from {target_user}, provide a focused answer that specifically addresses the query. Only include information relevant to what was asked. If the messages don't contain relevant information about the specific topic, say so. Keep it concise and conversational. Address {requester} directly.
 
 Messages:
 {messages}
 
-Summary for {requester}:"""
+Answer for {requester}:"""
 
 EXAMPLES_PROMPT = """{persona}
 
@@ -64,6 +66,7 @@ def get_prompt_for_query(query, messages, user_name=None, requester_name=None, p
         return SUMMARY_PROMPT.format(
             persona=persona,
             requester=requester_name,
+            query=query,
             target_user=user_name or "the user",
             messages=formatted_messages
         )
