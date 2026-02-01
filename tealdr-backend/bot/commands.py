@@ -64,14 +64,16 @@ class BotCommands:
         to_date: str = None,
         min_length: int = None
     ):
+        # Defer immediately to prevent interaction timeout (must be within 3 seconds)
+        await interaction.response.defer(thinking=True)
+        
+        # Check rate limit after deferring
         if not rate_limiter.check_rate_limit(interaction.user.id):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "You're sending too many requests. Please wait a moment and try again.",
                 ephemeral=True
             )
             return
-        
-        await interaction.response.defer(thinking=True)
         
         try:
             guild = interaction.guild
@@ -162,7 +164,7 @@ class BotCommands:
             logger.info(f"Found {len(messages)} relevant messages")
             
             persona = await server_settings_client.get_bot_persona(guild.id)
-            user_name = mentioned_user.name if mentioned_user else "users"
+            user_name = mentioned_user.display_name if mentioned_user else "users"
             requester_name = interaction.user.display_name
             
             # Build prompt with conversation context
