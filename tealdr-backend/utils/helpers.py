@@ -6,15 +6,16 @@ def parse_time_range(time_string):
     now = datetime.utcnow()
     time_string = time_string.lower().strip()
     
-    if time_string == "24h" or time_string == "today":
+    # Handle special keywords
+    if time_string == "today":
         start = now - timedelta(hours=24)
         return (start, now)
     
-    elif time_string == "7d" or time_string == "this week":
+    elif time_string == "this week":
         start = now - timedelta(days=7)
         return (start, now)
     
-    elif time_string == "30d" or time_string == "this month":
+    elif time_string == "this month":
         start = now - timedelta(days=30)
         return (start, now)
     
@@ -23,9 +24,28 @@ def parse_time_range(time_string):
         yesterday_end = yesterday_start.replace(hour=23, minute=59, second=59)
         return (yesterday_start, yesterday_end)
     
-    else:
-        start = now - timedelta(days=7)
+    # Parse custom timeframes like "2h", "30m", "7d", "1w"
+    pattern = r'^(\d+)([mhdw])$'
+    match = re.match(pattern, time_string)
+    
+    if match:
+        amount = int(match.group(1))
+        unit = match.group(2)
+        
+        if unit == 'm':  # minutes
+            start = now - timedelta(minutes=amount)
+        elif unit == 'h':  # hours
+            start = now - timedelta(hours=amount)
+        elif unit == 'd':  # days
+            start = now - timedelta(days=amount)
+        elif unit == 'w':  # weeks
+            start = now - timedelta(weeks=amount)
+        
         return (start, now)
+    
+    # Default fallback
+    start = now - timedelta(days=7)
+    return (start, now)
 
 def extract_user_mention(query, guild):
     mention_pattern = r'<@!?(\d+)>|@(\w+)'

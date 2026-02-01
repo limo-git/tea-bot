@@ -193,35 +193,47 @@ class DMCommands:
         self,
         interaction: discord.Interaction,
         time_period: str,
-        delivery: str
+        delivery: str,
+        server_name: str = None
     ):
         """Request an on-demand summary via DM or email"""
         await interaction.response.defer(ephemeral=True)
         
         try:
-            guild = interaction.guild
-            if not guild:
+            # Resolve server context (works in both DMs and servers)
+            from utils.server_selector import resolve_server_context
+            guilds, is_multi = await resolve_server_context(
+                interaction, 
+                self.bot, 
+                server_name, 
+                allow_multi=False
+            )
+            
+            if not guilds:
                 await interaction.followup.send(
-                    "❌ This command can only be used in a server.",
+                    "❌ Could not find the specified server, or you don't share any servers with me.",
                     ephemeral=True
                 )
                 return
             
-            # Parse time period
-            days_map = {
-                '24h': 1,
-                '7d': 7,
-                '30d': 30
-            }
-            days = days_map.get(time_period, 7)
+            guild = guilds[0]
             
-            # Get messages from the time period
-            from_date = datetime.utcnow() - timedelta(days=days)
+            # Parse time period using the flexible helper
+            from utils.helpers import parse_time_range
+            time_range = parse_time_range(time_period)
+            from_date, to_date = time_range
             
-            messages = await search_with_context(
-                guild_id=guild.id,
-                query="",
-                from_date=from_date.isoformat(),
+            # Calculate days for display
+            days = (to_date - from_date).days
+            if days == 0:
+                days = 1  # For sub-day periods
+            
+            # Get messages from the time period using supabase_client directly
+            from database.supabase_client import supabase_client
+            messages = await supabase_client.get_messages_by_timerange(
+                server_id=guild.id,
+                start_time=from_date,
+                end_time=to_date,
                 limit=100
             )
             
@@ -233,9 +245,18 @@ class DMCommands:
                 return
             
             # Generate summary using AI
-            prompt = f"{RECAP_PROMPT}\n\nGenerate a comprehensive summary of the following messages from the last {days} days:\n\n"
-            for msg in messages[:50]:  # Limit to 50 messages for token management
-                prompt += f"[{msg.get('author_name', 'Unknown')}]: {msg.get('content', '')}\n"
+            from ai.prompts import format_messages_for_ai
+            from database.server_settings import server_settings_client
+            
+            persona = await server_settings_client.get_bot_persona(guild.id)
+            requester_name = interaction.user.display_name
+            formatted_messages = format_messages_for_ai(messages[:50])
+            
+            prompt = RECAP_PROMPT.format(
+                persona=persona,
+                requester=requester_name,
+                messages=formatted_messages
+            )
             
             summary = await gemini_client.generate_response(prompt)
             
@@ -587,15 +608,11 @@ def register_dm_commands(bot):
     
     @bot.tree.command(name="request-summary", description="Request an on-demand summary via DM or email")
     @app_commands.describe(
-        time_period="Time period for the summary",
-        delivery="How to receive the summary"
+        time_period="Time range (e.g., '1h', '24h', '7d', '30d')",
+        delivery="How to receive the summary",
+        server_name="Optional: Server name (for DM use)"
     )
     @app_commands.choices(
-        time_period=[
-            app_commands.Choice(name="Last 24 hours", value="24h"),
-            app_commands.Choice(name="Last 7 days", value="7d"),
-            app_commands.Choice(name="Last 30 days", value="30d")
-        ],
         delivery=[
             app_commands.Choice(name="Send to DM", value="dm"),
             app_commands.Choice(name="Send to Email", value="email")
@@ -604,9 +621,10 @@ def register_dm_commands(bot):
     async def request_summary(
         interaction: discord.Interaction,
         time_period: str,
-        delivery: str
+        delivery: str,
+        server_name: str = None
     ):
-        await dm_commands.request_summary_command(interaction, time_period, delivery)
+        await dm_commands.request_summary_command(interaction, time_period, delivery, server_name)
     
     @bot.tree.command(name="bug-summary", description="Get a summary of recent bugs and dependency issues")
     @app_commands.describe(days="Number of days to look back (1-30)")

@@ -123,117 +123,168 @@ Expected: Summary of current channel for last hour
 
 ---
 
-### 2. Analytics Commands
+### 2. Statistics Commands
 
-#### Test `/stats` - Server Statistics
+#### Test `/stats` - Server & Personal Statistics
 ```
-Command: /stats
-Expected: Shows message count, active users, channels, search queries
-```
-
-#### Test `/activity` - User Activity
-```
-Command: /activity user: @username
-Expected: Shows activity stats for specific user
+Command: /stats scope: Server Statistics
+Expected: Shows server message count, active users, channels
 ```
 
 ```
-Command: /activity timeframe: 7d
-Expected: Shows server-wide activity for last 7 days
+Command: /stats scope: My Statistics
+Expected: Shows your personal activity stats
 ```
 
-#### Test `/trends` - Trending Topics
+#### Test `/trends` - Trending Topics Analysis
 ```
 Command: /trends timeframe: 24h
-Expected: Shows trending topics in last 24 hours
+Expected: Shows trending words, most active users, and active channels from last 24 hours
 ```
 
 ```
-Command: /trends channel: #general
-Expected: Shows trends specific to #general channel
-```
-
-#### Test `/leaderboard` - Most Active Users
-```
-Command: /leaderboard timeframe: 7d
-Expected: Shows top 10 most active users this week
-```
-
----
-
-### 3. Tag Commands
-
-#### Test `/tag-create` - Create Tag
-```
-Command: /tag-create name: "api-docs" content: "API documentation: https://docs.example.com"
-Expected: Creates a new tag
+Command: /trends timeframe: 7d channel: #general
+Expected: Shows trends specific to #general channel for last 7 days
 ```
 
 ```
-Command: /tag-create name: "meeting-link" content: "Daily standup: https://meet.google.com/abc-defg-hij"
-Expected: Creates meeting link tag
-```
-
-#### Test `/tag` - Use Tag
-```
-Command: /tag name: "api-docs"
-Expected: Displays the API docs content
-```
-
-#### Test `/tag-list` - List All Tags
-```
-Command: /tag-list
-Expected: Shows all available tags
-```
-
-#### Test `/tag-edit` - Edit Tag
-```
-Command: /tag-edit name: "api-docs" content: "Updated API docs: https://docs.example.com/v2"
-Expected: Updates existing tag
-```
-
-#### Test `/tag-delete` - Delete Tag
-```
-Command: /tag-delete name: "api-docs"
-Expected: Removes the tag
+Command: /trends timeframe: 2h
+Expected: Shows recent trends from last 2 hours
 ```
 
 ---
 
-### 4. Summary Commands (DM-based)
+### 3. Fun Commands
 
-#### Test `/summary-subscribe` - Subscribe to Summaries
+#### Test `/wrapped` - Year-End Summary
 ```
-Command: /summary-subscribe frequency: daily time: 09:00
-Expected: Bot DMs you confirming subscription
-```
-
-```
-Command: /summary-subscribe frequency: weekly time: 09:00 day: monday
-Expected: Sets up weekly summaries
+Command: /wrapped
+Expected: Generates Spotify Wrapped-style summary for last year
 ```
 
-#### Test `/summary-topics` - Filter Topics
 ```
-Command: /summary-topics topics: bugs, features, announcements
-Expected: Only includes these topics in summaries
-```
-
-#### Test `/summary-servers` - Select Servers
-```
-Command: /summary-servers
-Expected: Shows list of servers to include in summaries
+Command: /wrapped year: 2025
+Expected: Generates wrapped for specific year
 ```
 
-#### Test `/summary-unsubscribe` - Unsubscribe
+#### Test `/timemachine` - Historical Lookup
 ```
-Command: /summary-unsubscribe
-Expected: Stops sending summaries
+Command: /timemachine date: 01-15
+Expected: Shows what happened on January 15th in previous years
+```
+
+```
+Command: /timemachine date: 2025-01-15
+Expected: Shows what happened on specific date
+```
+
+#### Test `/quiz` - Server History Quiz
+```
+Command: /quiz num_questions: 5 time_period: Last 30 days
+Expected: Creates 5-question quiz from last 30 days
 ```
 
 ---
 
-### 5. Utility Commands
+### 4. Export & Utility Commands
+
+#### Test `/export` - Export Search Results
+```
+Command: /export query: "API" format: JSON
+Expected: Exports search results as JSON file
+```
+
+```
+Command: /export query: "bugs" format: CSV channel: #bug-reports
+Expected: Exports bug-related messages as CSV
+```
+
+#### Test `/help` - Show Help
+```
+Command: /help
+Expected: Displays all available commands with descriptions
+```
+
+#### Test `/clear` - Clear Context
+```
+Command: /clear
+Expected: Clears your conversation context with the bot
+```
+
+---
+
+### 5. Admin Commands (Requires Admin Permissions)
+
+#### Test `/settings` - Bot Settings
+```
+Command: /settings action: View Settings
+Expected: Shows current server settings
+```
+
+```
+Command: /settings action: Exclude Channel channel: #private
+Expected: Excludes channel from indexing
+```
+
+```
+Command: /settings action: Include Channel channel: #general
+Expected: Includes channel in indexing
+```
+
+```
+Command: /settings action: Set Retention Days channel: 90
+Expected: Sets message retention to 90 days
+```
+
+```
+Command: /settings action: Clear All Data
+Expected: Clears all indexed data (requires confirmation)
+```
+
+#### Test `/customize` - Bot Personality
+```
+Command: /customize action: View Persona
+Expected: Shows current bot personality
+```
+
+```
+Command: /customize action: Set Persona persona: "You are a friendly pirate"
+Expected: Changes bot personality to pirate theme
+```
+
+```
+Command: /customize action: Reset Persona
+Expected: Resets to default personality
+```
+
+---
+
+## 🔍 **Quick Command Reference**
+
+**Implemented Commands (12 total):**
+- `/ask` - AI-powered semantic search
+- `/recap` - Channel/user summaries
+- `/stats` - Server & personal statistics
+- `/trends` - Trending topics analysis
+- `/wrapped` - Year-end summary
+- `/timemachine` - Historical lookup
+- `/quiz` - Server history quiz
+- `/export` - Export search results
+- `/help` - Command help
+- `/clear` - Clear conversation context
+- `/settings` - Bot settings (Admin)
+- `/customize` - Bot personality (Admin)
+
+**Not Implemented:**
+- ~~`/search`~~ - Use `/ask` instead
+- ~~`/activity`~~ - Use `/stats` instead
+- ~~`/leaderboard`~~ - Not available
+- ~~`/tag-*`~~ - Tag commands not available
+- ~~`/summary-*`~~ - DM summary commands not available
+
+---
+
+## 🧪 **Advanced Testing Scenarios**
 
 #### Test `/help` - Show Help
 ```

@@ -23,6 +23,7 @@ from config import Config
 from database.server_settings import server_settings_client
 from collections import defaultdict
 from datetime import datetime, timedelta
+from bot.multi_server_search import multi_server_ask
 
 logger = get_logger(__name__)
 
@@ -62,10 +63,23 @@ class BotCommands:
         in_thread: discord.Thread = None,
         from_date: str = None,
         to_date: str = None,
-        min_length: int = None
+        min_length: int = None,
+        server_name: str = None
     ):
         # Defer immediately to prevent interaction timeout (must be within 3 seconds)
-        await interaction.response.defer(thinking=True)
+        try:
+            from datetime import datetime
+            start_time = datetime.utcnow()
+            await interaction.response.defer(thinking=True)
+            defer_time = (datetime.utcnow() - start_time).total_seconds()
+            logger.info(f"Defer took {defer_time:.2f} seconds")
+        except discord.errors.NotFound:
+            logger.error(f"Interaction expired before defer - this indicates network latency > 3 seconds")
+            # Interaction already expired, cannot respond
+            return
+        except Exception as e:
+            logger.error(f"Failed to defer interaction: {e}")
+            return
         
         # Check rate limit after deferring
         if not rate_limiter.check_rate_limit(interaction.user.id):
@@ -76,10 +90,29 @@ class BotCommands:
             return
         
         try:
-            guild = interaction.guild
-            if not guild:
-                await interaction.followup.send("This command can only be used in a server.")
+            # Resolve server context (works in both DMs and servers)
+            from utils.server_selector import resolve_server_context
+            guilds, is_multi = await resolve_server_context(
+                interaction, 
+                self.bot, 
+                server_name, 
+                allow_multi=True
+            )
+            
+            if not guilds:
+                await interaction.followup.send(
+                    "❌ Could not find the specified server, or you don't share any servers with me.",
+                    ephemeral=True
+                )
                 return
+            
+            # For multi-server search
+            if is_multi:
+                await self._multi_server_ask(interaction, query, guilds, from_date, to_date, min_length)
+                return
+            
+            # Single server search
+            guild = guilds[0]
             
             # Check for conversation context
             has_context = conversation_context.has_context(interaction.user.id)
@@ -280,12 +313,17 @@ class BotCommands:
             )
             await interaction.followup.send(embed=error_embed)
     
+    async def _multi_server_ask(self, interaction, query, guilds, from_date, to_date, min_length):
+        """Wrapper for multi-server ask functionality."""
+        await multi_server_ask(interaction, query, guilds, from_date, to_date, min_length)
+    
     async def recap_command(
         self,
         interaction: discord.Interaction,
         time: str,
         user: discord.User = None,
-        channel: discord.TextChannel = None
+        channel: discord.TextChannel = None,
+        server_name: str = None
     ):
         if not rate_limiter.check_rate_limit(interaction.user.id):
             await interaction.response.send_message(
@@ -297,10 +335,23 @@ class BotCommands:
         await interaction.response.defer(thinking=True)
         
         try:
-            guild = interaction.guild
-            if not guild:
-                await interaction.followup.send("This command can only be used in a server.")
+            # Resolve server context
+            from utils.server_selector import resolve_server_context
+            guilds, is_multi = await resolve_server_context(
+                interaction, 
+                self.bot, 
+                server_name, 
+                allow_multi=False  # Recap doesn't support multi-server
+            )
+            
+            if not guilds:
+                await interaction.followup.send(
+                    "❌ Could not find the specified server, or you don't share any servers with me.",
+                    ephemeral=True
+                )
                 return
+            
+            guild = guilds[0]
             
             time_range = parse_time_range(time)
             start_time, end_time = time_range
@@ -331,10 +382,10 @@ class BotCommands:
                     limit=100
                 )
             
-            if not messages or len(messages) < 5:
+            if not messages or len(messages) == 0:
                 embed = discord.Embed(
                     title="📅 Recap",
-                    description="Not much activity in this timeframe.",
+                    description="No messages found in this timeframe.",
                     color=discord.Color.orange()
                 )
                 await interaction.followup.send(embed=embed)
@@ -1276,6 +1327,156 @@ class BotCommands:
         except Exception as e:
             logger.error(f"Error in stats command: {e}")
             await interaction.followup.send("An error occurred while retrieving statistics.")
+    
+    async def trends_command(
+        self,
+        interaction: discord.Interaction,
+        timeframe: str = "24h",
+        channel: discord.TextChannel = None,
+        server_name: str = None
+    ):
+        await interaction.response.defer(thinking=True)
+        
+        try:
+            # Resolve server context
+            from utils.server_selector import resolve_server_context
+            guilds, is_multi = await resolve_server_context(
+                interaction, 
+                self.bot, 
+                server_name, 
+                allow_multi=False  # Trends doesn't support multi-server
+            )
+            
+            if not guilds:
+                await interaction.followup.send(
+                    "❌ Could not find the specified server, or you don't share any servers with me.",
+                    ephemeral=True
+                )
+                return
+            
+            guild = guilds[0]
+            
+            # Parse timeframe
+            time_range = parse_time_range(timeframe)
+            start_time, end_time = time_range
+            
+            logger.info(f"Analyzing trends for {interaction.user}: timeframe={timeframe}, channel={channel}")
+            
+            # Get messages from timeframe
+            if channel:
+                messages = await supabase_client.get_messages_by_timerange(
+                    server_id=guild.id,
+                    channel_id=channel.id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    limit=500
+                )
+            else:
+                messages = await supabase_client.get_messages_by_timerange(
+                    server_id=guild.id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    limit=500
+                )
+            
+            if not messages or len(messages) < 10:
+                embed = discord.Embed(
+                    title="📈 Trending Topics",
+                    description="Not enough activity to analyze trends in this timeframe.",
+                    color=discord.Color.orange()
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            logger.info(f"Analyzing {len(messages)} messages for trends")
+            
+            # Analyze word frequency (excluding common words)
+            from collections import Counter
+            import re
+            
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'im', 'dont', 'cant', 'wont', 'isnt', 'arent', 'wasnt', 'werent'}
+            
+            word_counts = Counter()
+            user_activity = Counter()
+            channel_activity = Counter()
+            
+            for msg in messages:
+                content = msg.get('content', '').lower()
+                # Extract words (alphanumeric only, 3+ chars)
+                words = re.findall(r'\b[a-z]{3,}\b', content)
+                for word in words:
+                    if word not in stop_words:
+                        word_counts[word] += 1
+                
+                # Track user activity
+                author_name = msg.get('author_name', 'Unknown')
+                user_activity[author_name] += 1
+                
+                # Track channel activity
+                channel_name = msg.get('channel_name', 'Unknown')
+                channel_activity[channel_name] += 1
+            
+            # Get top trending words
+            top_words = word_counts.most_common(10)
+            top_users = user_activity.most_common(5)
+            top_channels = channel_activity.most_common(5)
+            
+            # Create embed
+            embed = discord.Embed(
+                title="📈 Trending Topics",
+                description=f"Analysis of {len(messages)} messages from the last {timeframe}",
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            
+            if channel:
+                embed.description += f" in {channel.mention}"
+            
+            # Top trending words
+            if top_words:
+                words_text = []
+                for i, (word, count) in enumerate(top_words, 1):
+                    bar = '█' * min(int(count / top_words[0][1] * 10), 10)
+                    words_text.append(f"`{i}.` **{word}** {bar} ({count})")
+                
+                embed.add_field(
+                    name="🔥 Trending Words",
+                    value="\n".join(words_text),
+                    inline=False
+                )
+            
+            # Most active users
+            if top_users:
+                users_text = []
+                for i, (user, count) in enumerate(top_users, 1):
+                    users_text.append(f"`{i}.` {user}: {count} messages")
+                
+                embed.add_field(
+                    name="👥 Most Active Users",
+                    value="\n".join(users_text),
+                    inline=True
+                )
+            
+            # Most active channels (if not filtering by channel)
+            if not channel and top_channels:
+                channels_text = []
+                for i, (ch, count) in enumerate(top_channels, 1):
+                    channels_text.append(f"`{i}.` #{ch}: {count} messages")
+                
+                embed.add_field(
+                    name="💬 Active Channels",
+                    value="\n".join(channels_text),
+                    inline=True
+                )
+            
+            embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"Sent trends analysis to {interaction.user}")
+        
+        except Exception as e:
+            logger.error(f"Error in trends command: {e}")
+            await interaction.followup.send("An error occurred while analyzing trends.")
 
 def setup_commands(bot):
     commands = BotCommands(bot)
@@ -1287,7 +1488,8 @@ def setup_commands(bot):
         in_thread="Optional: Search only in this thread",
         from_date="Optional: Start date (YYYY-MM-DD)",
         to_date="Optional: End date (YYYY-MM-DD)",
-        min_length="Optional: Minimum message length in characters"
+        min_length="Optional: Minimum message length in characters",
+        server_name="Optional: Server name (for DM use) or 'all' for multi-server search"
     )
     async def ask(
         interaction: discord.Interaction, 
@@ -1296,28 +1498,26 @@ def setup_commands(bot):
         in_thread: discord.Thread = None,
         from_date: str = None,
         to_date: str = None,
-        min_length: int = None
+        min_length: int = None,
+        server_name: str = None
     ):
-        await commands.ask_command(interaction, query, in_channel, in_thread, from_date, to_date, min_length)
+        await commands.ask_command(interaction, query, in_channel, in_thread, from_date, to_date, min_length, server_name)
     
     @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
     @app_commands.describe(
-        time="Time range for the recap",
+        time="Time range (e.g., '1h', '30m', '2d', '1w')",
         user="Optional: Specific user to recap",
-        channel="Optional: Specific channel to recap"
+        channel="Optional: Specific channel to recap",
+        server_name="Optional: Server name (for DM use)"
     )
-    @app_commands.choices(time=[
-        app_commands.Choice(name="Last 24 hours", value="24h"),
-        app_commands.Choice(name="Last 7 days", value="7d"),
-        app_commands.Choice(name="Last 30 days", value="30d")
-    ])
     async def recap(
         interaction: discord.Interaction,
         time: str,
         user: discord.User = None,
-        channel: discord.TextChannel = None
+        channel: discord.TextChannel = None,
+        server_name: str = None
     ):
-        await commands.recap_command(interaction, time, user, channel)
+        await commands.recap_command(interaction, time, user, channel, server_name)
     
     @bot.tree.command(name="settings", description="Manage bot settings (Admin only)")
     @app_commands.describe(
@@ -1423,6 +1623,20 @@ def setup_commands(bot):
             await interaction.response.send_message("Number of questions must be between 3 and 10.", ephemeral=True)
             return
         await commands.quiz_command(interaction, num_questions, time_period)
+    
+    @bot.tree.command(name="trends", description="Analyze trending topics and activity patterns")
+    @app_commands.describe(
+        timeframe="Time range (e.g., '1h', '24h', '7d')",
+        channel="Optional: Analyze specific channel only",
+        server_name="Optional: Server name (for DM use)"
+    )
+    async def trends(
+        interaction: discord.Interaction,
+        timeframe: str = "24h",
+        channel: discord.TextChannel = None,
+        server_name: str = None
+    ):
+        await commands.trends_command(interaction, timeframe, channel, server_name)
     
     @bot.tree.command(name="wrapped", description="Generate Spotify Wrapped-style year-end summary")
     @app_commands.describe(year="Year to generate wrapped for (defaults to last year)")

@@ -2,12 +2,17 @@ SUMMARY_PROMPT = """{persona}
 
 The user {requester} asked: "{query}"
 
-Based on these messages from {target_user}, provide a focused answer that specifically addresses the query. Only include information relevant to what was asked. If the messages don't contain relevant information about the specific topic, say so. Keep it concise and conversational. Address {requester} directly.
+IMPORTANT: Only include information that DIRECTLY answers the specific question asked. Do not include related but tangential information. If {target_user} mentioned multiple topics, only discuss the one asked about in the query.
 
-Messages:
+For example:
+- If asked about "the API", only mention API-related statements, not authentication or documentation
+- If asked about "bugs", only mention bugs, not features or fixes
+- If asked about a specific topic, ignore other topics even if mentioned in the same message
+
+Messages from {target_user}:
 {messages}
 
-Answer for {requester}:"""
+Focused answer for {requester} (only about the specific topic asked):"""
 
 EXAMPLES_PROMPT = """{persona}
 
