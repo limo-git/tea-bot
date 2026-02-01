@@ -7,6 +7,7 @@ from ai.embeddings import generate_embedding
 from utils.cleanup import cleanup_old_messages, get_storage_stats
 from database.server_settings import server_settings_client
 from database.feedback_client import feedback_client
+from utils.bug_tracker import bug_tracker
 
 logger = get_logger(__name__)
 
@@ -100,6 +101,16 @@ class BotEvents:
             if embedding:
                 await store_message_with_embedding(message_data, embedding)
                 logger.info(f"Indexed message {message.id} from {message.author}")
+                
+                # Check if message is about a bug/dependency issue
+                if bug_tracker.is_bug_discussion(message.content):
+                    bug_tracker.track_bug_discussion(
+                        server_id=message.guild.id,
+                        channel_id=parent_channel_id,
+                        message_id=message.id,
+                        message_content=message.content
+                    )
+                    logger.info(f"Tracked bug discussion in message {message.id}")
             else:
                 logger.warning(f"Failed to generate embedding for message {message.id}")
         

@@ -32,6 +32,14 @@ Export search results to CSV, JSON, Markdown, or plain text for analysis.
 - **Wrapped:** Spotify-style yearly summaries
 - **Time Machine:** See what happened on this day in previous years
 
+### 📬 **Personalized Summaries**
+- **DM Delivery:** Get summaries sent directly to your DMs
+- **Email Delivery:** Receive summaries via email
+- **Customizable Frequency:** Daily, weekly, or monthly summaries
+- **Topic Filtering:** Choose specific topics you want summaries about
+- **Server Selection:** Pick which servers send you summaries
+- **Bug Tracking:** Stay updated on bug discussions and dependency updates
+
 ### 🔒 **Privacy First**
 - Complete data isolation between servers
 - Automatic message deletion after 30 days (configurable)
@@ -57,6 +65,11 @@ Export search results to CSV, JSON, Markdown, or plain text for analysis.
 | `/quiz` | Create trivia games from server history |
 | `/wrapped` | Generate yearly server summaries |
 | `/timemachine` | See what happened on this day in past years |
+| `/request-summary` | Get personalized summaries in your DMs or email |
+| `/bug-summary` | View recent bug discussions and dependency updates |
+| `/dm-settings` | Manage your DM and email summary preferences |
+| `/summary-topics` | Choose which topics you want summaries about |
+| `/summary-servers` | Select which servers send you summaries |
 | `/settings` | Configure bot behavior (Admin only) |
 | `/customize` | Set bot personality (Admin only) |
 | `/clear` | Clear your conversation context |
@@ -100,6 +113,35 @@ Visit our [comprehensive documentation](https://tealdr.vercel.app/docs) for:
 ### Catching Up on Discussions
 ```
 /recap period: Last 7 days channel: #general
+```
+
+### Getting Personalized DM Summaries
+```
+/request-summary time_period: Last 7 days delivery: Send to DM
+```
+
+### Tracking Bug Discussions
+```
+/bug-summary days: 7
+```
+
+### Setting Up Email Summaries
+```
+/dm-settings action: Set Email value: your@email.com
+/dm-settings action: Toggle Email Summaries
+```
+
+### Managing Summary Topics
+```
+/summary-topics action: Add Topic topic: bug fixes
+/summary-topics action: Add Topic topic: feature requests
+/summary-topics action: View Topics
+```
+
+### Selecting Summary Servers
+```
+/summary-servers action: Enable This Server
+/summary-servers action: View Enabled Servers
 ```
 
 ### Tracking Action Items

@@ -2,18 +2,15 @@ import Link from 'next/link';
 
 export default function DataRetention() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-[#1a1a1a]">
+    <div className="min-h-screen bg-[#0a0a0a] text-white font-mono">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a] border-b border-[#5865F2]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#5865F2] flex items-center justify-center font-bold text-lg shadow-lg shadow-[#5865F2]/50">
-              T
-            </div>
-            <span className="text-xl font-bold">TeaL;DR</span>
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-lg font-bold tracking-tight">teal;dr</span>
           </Link>
           <div className="flex items-center gap-6">
-            <Link href="/" className="text-gray-400 hover:text-white transition-colors duration-300">Home</Link>
-            <Link href="/docs" className="text-[#5865F2]">Docs</Link>
+            <Link href="/" className="text-[#a0a0a0] hover:text-[#5865F2] transition-colors duration-200">HOME</Link>
+            <Link href="/docs" className="text-[#5865F2] font-bold">DOCS</Link>
           </div>
         </div>
       </header>

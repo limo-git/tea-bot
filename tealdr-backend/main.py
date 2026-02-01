@@ -7,6 +7,7 @@ from config import Config
 from utils.logger import setup_logger, get_logger
 from bot.events import setup_events
 from bot.commands import setup_commands
+from bot.dm_commands import register_dm_commands
 
 setup_logger()
 logger = get_logger(__name__)
@@ -31,6 +32,7 @@ def main():
     
     setup_events(bot)
     setup_commands(bot)
+    register_dm_commands(bot)
     
     def signal_handler(sig, frame):
         logger.info("Received shutdown signal, closing bot...")

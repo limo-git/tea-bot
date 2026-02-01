@@ -30,28 +30,3 @@ Connect to external tools.
 - Cross-reference with Discord messages
 
 **Estimated Time:** 6-8 hours per integration
-
----
-
-### 17. **Web Dashboard**
-Browser-based interface.
-
-**Features:**
-- View all indexed messages
-- Advanced search UI
-- Analytics graphs
-- Admin controls
-- Export tools
-
-**Tech stack:**
-- Next.js frontend
-- Supabase backend
-- Deploy on Vercel
-
-**Implementation:**
-- Build Next.js app
-- Create API routes
-- Design UI components
-- Add authentication
-
-**Estimated Time:** 20-30 hours
