@@ -35,7 +35,7 @@ class GeminiClient:
             response = await loop.run_in_executor(
                 None,
                 lambda: self.client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-3-flash-preview",
                     contents=full_prompt,
                     config=self.generation_config
                 )

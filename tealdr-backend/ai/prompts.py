@@ -2,17 +2,12 @@ SUMMARY_PROMPT = """{persona}
 
 The user {requester} asked: "{query}"
 
-IMPORTANT: Only include information that DIRECTLY answers the specific question asked. Do not include related but tangential information. If {target_user} mentioned multiple topics, only discuss the one asked about in the query.
-
-For example:
-- If asked about "the API", only mention API-related statements, not authentication or documentation
-- If asked about "bugs", only mention bugs, not features or fixes
-- If asked about a specific topic, ignore other topics even if mentioned in the same message
+Based on the following messages, provide a helpful and comprehensive answer. If the query is specific, focus on that topic. If the query is broad or general, provide a well-organized overview of the relevant information.
 
 Messages from {target_user}:
 {messages}
 
-Focused answer for {requester} (only about the specific topic asked):"""
+Answer for {requester}:"""
 
 EXAMPLES_PROMPT = """{persona}
 
@@ -38,12 +33,12 @@ GENERAL_QUERY_PROMPT = """{persona}
 
 The user {user_name} is asking: "{query}"
 
-Based on the following messages from this Discord server, provide a helpful answer directly to {user_name}. If the messages don't contain relevant information, let them know.
+Based on the following messages from this Discord server, provide a helpful and comprehensive answer. For broad questions, give an organized overview. For specific questions, focus on the relevant details. Be conversational and helpful.
 
 Messages:
 {messages}
 
-Answer (speak directly to {user_name}):"""
+Answer for {user_name}:"""
 
 def format_messages_for_ai(messages):
     formatted = []
@@ -67,16 +62,8 @@ def get_prompt_for_query(query, messages, user_name=None, requester_name=None, p
     
     query_lower = query.lower()
     
-    if any(word in query_lower for word in ['summary', 'summarize', 'what did', 'tell me about']):
-        return SUMMARY_PROMPT.format(
-            persona=persona,
-            requester=requester_name,
-            query=query,
-            target_user=user_name or "the user",
-            messages=formatted_messages
-        )
-    
-    elif any(word in query_lower for word in ['example', 'show me', 'find']):
+    # Use EXAMPLES_PROMPT only for explicit example requests
+    if any(word in query_lower for word in ['example', 'examples', 'show me examples', 'give me examples']):
         return EXAMPLES_PROMPT.format(
             persona=persona,
             requester=requester_name,
@@ -85,6 +72,17 @@ def get_prompt_for_query(query, messages, user_name=None, requester_name=None, p
             messages=formatted_messages
         )
     
+    # Use SUMMARY_PROMPT for user-specific queries
+    elif user_name and user_name != "users":
+        return SUMMARY_PROMPT.format(
+            persona=persona,
+            requester=requester_name,
+            query=query,
+            target_user=user_name,
+            messages=formatted_messages
+        )
+    
+    # Use GENERAL_QUERY_PROMPT for all other queries (handles both broad and specific)
     else:
         return GENERAL_QUERY_PROMPT.format(
             persona=persona,
