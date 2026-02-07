@@ -34,7 +34,7 @@ echo "Step 2: Connecting to VM and updating..."
 
 # SSH command to pull, rebuild, and restart
 gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --command="
-cd $PROJECT_DIR && \
+cd tea-bot/tealdr-backend && \
 echo '==> Pulling latest code from GitHub...' && \
 git pull origin main && \
 echo '==> Stopping current bot...' && \

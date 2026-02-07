@@ -36,7 +36,7 @@ Write-Host "Step 2: Connecting to VM and updating..." -ForegroundColor Yellow
 
 # SSH command to pull, rebuild, and restart
 $updateCommands = @"
-cd $PROJECT_DIR && \
+cd tea-bot/tealdr-backend && \
 echo '==> Pulling latest code from GitHub...' && \
 git pull origin main && \
 echo '==> Stopping current bot...' && \
