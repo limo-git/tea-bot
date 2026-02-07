@@ -26,7 +26,7 @@ async def generate_embedding(text):
         result = await loop.run_in_executor(
             None,
             lambda: client.models.embed_content(
-                model="text-embedding-004",
+                model="models/embedding-001",
                 contents=text,
                 config={"task_type": "retrieval_document"}
             )
@@ -61,7 +61,7 @@ async def generate_query_embedding(text):
         result = await loop.run_in_executor(
             None,
             lambda: client.models.embed_content(
-                model="text-embedding-004",
+                model="models/embedding-001",
                 contents=text,
                 config={"task_type": "retrieval_query"}
             )
