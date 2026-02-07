@@ -1,13 +1,10 @@
-from google import genai
-from google.genai import types
 from config import Config
 from utils.logger import get_logger
 from utils.cache_manager import cache_manager
 import asyncio
+import httpx
 
 logger = get_logger(__name__)
-
-client = genai.Client(api_key=Config.GEMINI_API_KEY)
 
 async def generate_embedding(text):
     try:
@@ -21,18 +18,24 @@ async def generate_embedding(text):
             logger.debug(f"Using cached embedding for text (length: {len(text)})")
             return cached_embedding
         
-        # Generate new embedding
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: client.models.embed_content(
-                model="models/embedding-001",
-                contents=text,
-                config={"task_type": "retrieval_document"}
+        # Generate new embedding using REST API
+        async with httpx.AsyncClient() as client_http:
+            response = await client_http.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={Config.GEMINI_API_KEY}",
+                json={
+                    "content": {
+                        "parts": [{"text": text}]
+                    },
+                    "taskType": "retrieval_document"
+                }
             )
-        )
-        
-        embedding = result.embeddings[0].values
+            
+            if response.status_code != 200:
+                logger.error(f"Embedding API error: {response.status_code} - {response.text}")
+                return None
+            
+            result = response.json()
+            embedding = result.get("embedding", {}).get("values", [])
         
         # Cache the result
         cache_manager.set_embedding(text, embedding)
@@ -56,18 +59,24 @@ async def generate_query_embedding(text):
             logger.debug(f"Using cached query embedding for text (length: {len(text)})")
             return cached_embedding
         
-        # Generate new embedding
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: client.models.embed_content(
-                model="models/embedding-001",
-                contents=text,
-                config={"task_type": "retrieval_query"}
+        # Generate new embedding using REST API
+        async with httpx.AsyncClient() as client_http:
+            response = await client_http.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={Config.GEMINI_API_KEY}",
+                json={
+                    "content": {
+                        "parts": [{"text": text}]
+                    },
+                    "taskType": "retrieval_query"
+                }
             )
-        )
-        
-        embedding = result.embeddings[0].values
+            
+            if response.status_code != 200:
+                logger.error(f"Embedding API error: {response.status_code} - {response.text}")
+                return None
+            
+            result = response.json()
+            embedding = result.get("embedding", {}).get("values", [])
         
         # Cache the result
         cache_manager.set_embedding(cache_key, embedding)
