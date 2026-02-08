@@ -1531,7 +1531,7 @@ def setup_commands(bot):
             from utils.server_selector import get_shared_servers
             
             # Get shared servers between user and bot
-            shared_servers = get_shared_servers(interaction.client, interaction.user)
+            shared_servers = get_shared_servers(bot, interaction.user)
             
             # Filter by current input
             if current:
@@ -1558,7 +1558,7 @@ def setup_commands(bot):
             logger.error(f"Error in recap server autocomplete: {e}")
             await interaction.response.send_choices([])
 
-@bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
+    @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
 @app_commands.describe(
     time="Time range (e.g., '1h', '30m', '2d', '1w')",
     user="Optional: Specific user to recap",
