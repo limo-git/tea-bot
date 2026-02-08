@@ -80,14 +80,7 @@ async def multi_server_ask(
                 server_names.append(guild.name)
         
         if not all_results:
-            no_results_embed = embed_builder.create_no_results_embed(query, interaction.user)
-            no_results_embed.add_field(
-                name="🌐 Servers Searched",
-                value=f"Searched {len(guilds)} server(s)",
-                inline=False
-            )
-            await interaction.followup.send(embed=no_results_embed)
-            return
+            logger.info(f"No indexed messages found across {len(guilds)} servers for query: {query}")
         
         logger.info(f"Found {len(all_results)} total messages across {len(server_names)} servers")
         
@@ -98,13 +91,26 @@ async def multi_server_ask(
         # Generate AI response
         requester_name = interaction.user.display_name
         
-        prompt = get_prompt_for_query(
-            query=query,
-            messages=top_results,
-            user_name="users",
-            requester_name=requester_name,
-            persona="You are a helpful Discord assistant searching across multiple servers. When referencing messages, mention which server they're from."
-        )
+        if not all_results:
+            prompt = (
+                f"You are a helpful Discord assistant searching across multiple servers. "
+                f"When referencing messages, mention which server they're from.\n\n"
+                f"The user {requester_name} asked: \"{query}\"\n\n"
+                f"There are currently no indexed messages across the searched servers that match the query. "
+                f"This could be because the servers were recently added or messages haven't been indexed yet. "
+                f"Still try your best to answer the user's question based on your general knowledge. "
+                f"Be helpful, friendly, and let them know that as more messages are indexed, "
+                f"your answers will become more specific to their server conversations.\n\n"
+                f"Answer for {requester_name}:"
+            )
+        else:
+            prompt = get_prompt_for_query(
+                query=query,
+                messages=top_results,
+                user_name="users",
+                requester_name=requester_name,
+                persona="You are a helpful Discord assistant searching across multiple servers. When referencing messages, mention which server they're from."
+            )
         
         response = await gemini_client.generate_response(prompt)
         
@@ -119,16 +125,23 @@ async def multi_server_ask(
         # Add multi-server info to first embed
         if embeds:
             embeds[0].title = "🌐 Multi-Server Search Results"
-            embeds[0].add_field(
-                name="📊 Sources",
-                value=f"{len(all_results)} messages from {len(server_names)} server(s)",
-                inline=True
-            )
-            embeds[0].add_field(
-                name="🏢 Servers",
-                value=", ".join(server_names[:5]) + (f" (+{len(server_names)-5} more)" if len(server_names) > 5 else ""),
-                inline=True
-            )
+            if all_results:
+                embeds[0].add_field(
+                    name="📊 Sources",
+                    value=f"{len(all_results)} messages from {len(server_names)} server(s)",
+                    inline=True
+                )
+                embeds[0].add_field(
+                    name="🏢 Servers",
+                    value=", ".join(server_names[:5]) + (f" (+{len(server_names)-5} more)" if len(server_names) > 5 else ""),
+                    inline=True
+                )
+            else:
+                embeds[0].add_field(
+                    name="📊 Sources",
+                    value=f"No indexed messages yet — searched {len(guilds)} server(s)",
+                    inline=True
+                )
         
         # Send with pagination if multiple embeds
         if len(embeds) > 1:

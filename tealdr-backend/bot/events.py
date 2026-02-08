@@ -178,6 +178,93 @@ class BotEvents:
             oldest_keys = list(self.bot_responses.keys())[:50]
             for key in oldest_keys:
                 del self.bot_responses[key]
+    
+    async def on_guild_join(self, guild: discord.Guild):
+        """Auto-index the past 5 days of messages when the bot joins a new server."""
+        logger.info(f"Joined new server: {guild.name} (ID: {guild.id}) — starting backfill of past 5 days")
+        
+        # Run backfill in background so it doesn't block the bot
+        import asyncio
+        asyncio.create_task(self._backfill_server(guild))
+    
+    async def _backfill_server(self, guild: discord.Guild):
+        """Backfill past 5 days of messages for a server."""
+        from datetime import datetime, timedelta, timezone
+        from database.supabase_client import supabase_client
+        
+        after_date = datetime.now(timezone.utc) - timedelta(days=5)
+        total_indexed = 0
+        total_skipped = 0
+        total_errors = 0
+        
+        excluded_channels = await server_settings_client.get_excluded_channels(guild.id)
+        
+        for channel in guild.text_channels:
+            if channel.id in excluded_channels:
+                logger.debug(f"Skipping excluded channel {channel.name} in {guild.name}")
+                continue
+            
+            try:
+                permissions = channel.permissions_for(guild.me)
+                if not permissions.read_messages or not permissions.read_message_history:
+                    logger.debug(f"No read permissions for channel {channel.name} in {guild.name}")
+                    continue
+                
+                async for message in channel.history(after=after_date, limit=None, oldest_first=True):
+                    if message.author.bot:
+                        continue
+                    
+                    if not message.content or message.content.strip() == "":
+                        continue
+                    
+                    try:
+                        exists = await supabase_client.message_exists(message.id)
+                        if exists:
+                            total_skipped += 1
+                            continue
+                        
+                        is_thread = isinstance(message.channel, discord.Thread)
+                        thread_id = message.channel.id if is_thread else None
+                        parent_channel_id = message.channel.parent_id if is_thread else message.channel.id
+                        
+                        message_data = {
+                            'message_id': message.id,
+                            'server_id': guild.id,
+                            'channel_id': parent_channel_id,
+                            'thread_id': thread_id,
+                            'is_thread_message': is_thread,
+                            'author_id': message.author.id,
+                            'author_name': str(message.author),
+                            'content': message.content,
+                            'created_at': message.created_at
+                        }
+                        
+                        embedding = await generate_embedding(message.content)
+                        if embedding:
+                            await store_message_with_embedding(message_data, embedding)
+                            total_indexed += 1
+                        else:
+                            total_errors += 1
+                        
+                        # Rate limit: small delay to avoid API throttling
+                        if total_indexed % 50 == 0 and total_indexed > 0:
+                            logger.info(f"Backfill progress for {guild.name}: {total_indexed} messages indexed so far...")
+                            import asyncio
+                            await asyncio.sleep(1)
+                    
+                    except Exception as e:
+                        logger.error(f"Error indexing message {message.id} during backfill: {e}")
+                        total_errors += 1
+            
+            except discord.Forbidden:
+                logger.debug(f"Forbidden access to channel {channel.name} in {guild.name}")
+            except Exception as e:
+                logger.error(f"Error backfilling channel {channel.name} in {guild.name}: {e}")
+        
+        logger.info(
+            f"Backfill complete for {guild.name}: "
+            f"{total_indexed} indexed, {total_skipped} already existed, {total_errors} errors"
+        )
 
 def setup_events(bot):
     events = BotEvents(bot)
@@ -193,6 +280,10 @@ def setup_events(bot):
     @bot.event
     async def on_reaction_add(reaction, user):
         await events.on_reaction_add(reaction, user)
+    
+    @bot.event
+    async def on_guild_join(guild):
+        await events.on_guild_join(guild)
     
     # Make events accessible for tracking responses
     bot.events = events
