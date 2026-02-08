@@ -341,12 +341,26 @@ class BotCommands:
                 interaction, 
                 self.bot, 
                 server_name, 
-                allow_multi=False  # Recap doesn't support multi-server
+                allow_multi=True  # Allow server picker for DM usage
             )
             
             if not guilds:
                 await interaction.followup.send(
                     "❌ Could not find the specified server, or you don't share any servers with me.",
+                    ephemeral=True
+                )
+                return
+            
+            # If multi-server was selected, tell user to be specific
+            if is_multi and len(guilds) > 1:
+                server_names = [f"**{guild.name}**" for guild in guilds[:5]]
+                if len(guilds) > 5:
+                    server_names.append(f"and {len(guilds) - 5} more...")
+                
+                await interaction.followup.send(
+                    f"❌ `/recap` doesn't support multi-server search. Please specify a server:\n"
+                    f"• `/recap time:{time} server_name:{guilds[0].name}`\n\n"
+                    f"Available servers: {', '.join(server_names)}",
                     ephemeral=True
                 )
                 return
@@ -927,12 +941,12 @@ class BotCommands:
                 ])
                 embed.add_field(name="Options:", value=options_text, inline=False)
                 embed.add_field(name="⏱️", value="You have 20 seconds to answer!", inline=False)
-                embed.set_footer(text=f"React with 🅰️ 🅱️ ©️ or 🇩 to answer!")
+                embed.set_footer(text=f"React with 🅰️ 🅱️ 🇨 or 🇩 to answer!")
                 
                 await status_msg.edit(embed=embed)
                 
-                # Add reaction options
-                reactions = ['🅰️', '🅱️', '©️', '🇩']
+                # Add reaction options using correct Discord emoji names
+                reactions = ['�', '�', '🇨', '🇩']
                 for reaction in reactions:
                     await status_msg.add_reaction(reaction)
                 
@@ -944,10 +958,12 @@ class BotCommands:
                 
                 # Check answers
                 correct_emoji = reactions[ord(question['correct']) - ord('A')]
+                logger.info(f"Question {i}: Correct answer is {question['correct']}) - {correct_emoji}")
                 
                 for reaction in status_msg.reactions:
                     if str(reaction.emoji) in reactions:
                         users = [user async for user in reaction.users() if not user.bot]
+                        logger.info(f"Reaction {reaction.emoji}: {len(users)} users reacted")
                         
                         for user in users:
                             if user.id not in scores:
@@ -955,6 +971,9 @@ class BotCommands:
                             
                             if str(reaction.emoji) == correct_emoji:
                                 scores[user.id]['score'] += 1
+                                logger.info(f"User {user.display_name} answered correctly!")
+                
+                logger.info(f"Scores after question {i}: {scores}")
                 
                 # Show answer
                 answer_embed = discord.Embed(
@@ -1503,13 +1522,50 @@ def setup_commands(bot):
     ):
         await commands.ask_command(interaction, query, in_channel, in_thread, from_date, to_date, min_length, server_name)
     
-    @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
+    async def recap_server_autocomplete(
+        interaction: discord.Interaction,
+        current: str
+    ):
+        """Autocomplete for server selection in /recap command."""
+        try:
+            from utils.server_selector import get_shared_servers
+            
+            # Get shared servers between user and bot
+            shared_servers = get_shared_servers(interaction.client, interaction.user)
+            
+            # Filter by current input
+            if current:
+                filtered_servers = [
+                    guild for guild in shared_servers 
+                    if current.lower() in guild.name.lower()
+                ]
+            else:
+                filtered_servers = shared_servers
+            
+            # Return up to 25 options (Discord limit)
+            choices = []
+            for guild in filtered_servers[:25]:
+                choices.append(
+                    app_commands.Choice(
+                        name=guild.name,
+                        value=guild.name
+                    )
+                )
+            
+            await interaction.response.send_choices(choices)
+            
+        except Exception as e:
+            logger.error(f"Error in recap server autocomplete: {e}")
+            await interaction.response.send_choices([])
+
+@bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
     @app_commands.describe(
         time="Time range (e.g., '1h', '30m', '2d', '1w')",
         user="Optional: Specific user to recap",
         channel="Optional: Specific channel to recap",
         server_name="Optional: Server name (for DM use)"
     )
+    @app_commands.autocomplete(server_name=recap_server_autocomplete)
     async def recap(
         interaction: discord.Interaction,
         time: str,
