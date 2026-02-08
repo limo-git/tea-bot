@@ -1614,8 +1614,8 @@ async def customize(
 @bot.tree.command(name="clear", description="Clear your conversation context with the bot")
 async def clear(interaction: discord.Interaction):
     await commands.clear_command(interaction)
-    
-    @bot.tree.command(name="stats", description="View server or personal statistics")
+
+@bot.tree.command(name="stats", description="View server or personal statistics")
 @app_commands.describe(scope="What statistics to view")
 @app_commands.choices(scope=[
     app_commands.Choice(name="Server Statistics", value="server"),
@@ -1623,8 +1623,8 @@ async def clear(interaction: discord.Interaction):
 ])
 async def stats(interaction: discord.Interaction, scope: str = "server"):
     await commands.stats_command(interaction, scope)
-    
-    @bot.tree.command(name="help", description="Show help information about bot commands")
+
+@bot.tree.command(name="help", description="Show help information about bot commands")
 async def help_cmd(interaction: discord.Interaction):
     await commands.help_command(interaction)
 
