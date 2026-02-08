@@ -956,12 +956,12 @@ class BotCommands:
                 ])
                 embed.add_field(name="Options:", value=options_text, inline=False)
                 embed.add_field(name="⏱️", value="You have 20 seconds to answer!", inline=False)
-                embed.set_footer(text=f"React with 🅰️ 🅱️ 🇨 or 🇩 to answer!")
+                embed.set_footer(text=f"React with \U0001F1E6 \U0001F1E7 \U0001F1E8 or \U0001F1E9 to answer!")
                 
                 await status_msg.edit(embed=embed)
                 
                 # Add reaction options using correct Discord emoji names
-                reactions = ['�', '�', '🇨', '🇩']
+                reactions = ['\U0001F1E6', '\U0001F1E7', '\U0001F1E8', '\U0001F1E9']
                 for reaction in reactions:
                     await status_msg.add_reaction(reaction)
                 
