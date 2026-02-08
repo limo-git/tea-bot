@@ -1559,142 +1559,142 @@ def setup_commands(bot):
             await interaction.response.send_choices([])
 
 @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
-    @app_commands.describe(
-        time="Time range (e.g., '1h', '30m', '2d', '1w')",
-        user="Optional: Specific user to recap",
-        channel="Optional: Specific channel to recap",
-        server_name="Optional: Server name (for DM use)"
-    )
-    @app_commands.autocomplete(server_name=recap_server_autocomplete)
-    async def recap(
-        interaction: discord.Interaction,
-        time: str,
-        user: discord.User = None,
-        channel: discord.TextChannel = None,
-        server_name: str = None
-    ):
-        await commands.recap_command(interaction, time, user, channel, server_name)
-    
-    @bot.tree.command(name="settings", description="Manage bot settings (Admin only)")
-    @app_commands.describe(
-        action="Action to perform",
-        channel="Channel to exclude/include (if applicable)"
-    )
-    @app_commands.choices(action=[
-        app_commands.Choice(name="Exclude channel from indexing", value="exclude_channel"),
-        app_commands.Choice(name="Include channel for indexing", value="include_channel"),
-        app_commands.Choice(name="View current settings", value="view_settings")
-    ])
-    @admin_only()
-    async def settings(
-        interaction: discord.Interaction,
-        action: str,
-        channel: discord.TextChannel = None
-    ):
-        await commands.settings_command(interaction, action, channel)
-    
-    @bot.tree.command(name="customize", description="Customize the bot's personality and response style (Admin only)")
-    @app_commands.describe(
-        action="What to do with the bot persona",
-        persona="The personality description for the bot (required for 'Set Persona')"
-    )
-    @app_commands.choices(action=[
-        app_commands.Choice(name="View Current Persona", value="view"),
-        app_commands.Choice(name="Set Persona", value="set"),
-        app_commands.Choice(name="Reset to Default", value="reset")
-    ])
-    @admin_only()
-    async def customize(
-        interaction: discord.Interaction,
-        action: str,
-        persona: str = None
-    ):
-        await commands.customize_command(interaction, action, persona)
-    
-    @bot.tree.command(name="clear", description="Clear your conversation context with the bot")
-    async def clear(interaction: discord.Interaction):
-        await commands.clear_command(interaction)
+@app_commands.describe(
+    time="Time range (e.g., '1h', '30m', '2d', '1w')",
+    user="Optional: Specific user to recap",
+    channel="Optional: Specific channel to recap",
+    server_name="Optional: Server name (for DM use)"
+)
+@app_commands.autocomplete(server_name=recap_server_autocomplete)
+async def recap(
+    interaction: discord.Interaction,
+    time: str,
+    user: discord.User = None,
+    channel: discord.TextChannel = None,
+    server_name: str = None
+):
+    await commands.recap_command(interaction, time, user, channel, server_name)
+
+@bot.tree.command(name="settings", description="Manage bot settings (Admin only)")
+@app_commands.describe(
+    action="Action to perform",
+    channel="Channel to exclude/include (if applicable)"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="Exclude channel from indexing", value="exclude_channel"),
+    app_commands.Choice(name="Include channel for indexing", value="include_channel"),
+    app_commands.Choice(name="View current settings", value="view_settings")
+])
+@admin_only()
+async def settings(
+    interaction: discord.Interaction,
+    action: str,
+    channel: discord.TextChannel = None
+):
+    await commands.settings_command(interaction, action, channel)
+
+@bot.tree.command(name="customize", description="Customize the bot's personality and response style (Admin only)")
+@app_commands.describe(
+    action="What to do with the bot persona",
+    persona="The personality description for the bot (required for 'Set Persona')"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="View Current Persona", value="view"),
+    app_commands.Choice(name="Set Persona", value="set"),
+    app_commands.Choice(name="Reset to Default", value="reset")
+])
+@admin_only()
+async def customize(
+    interaction: discord.Interaction,
+    action: str,
+    persona: str = None
+):
+    await commands.customize_command(interaction, action, persona)
+
+@bot.tree.command(name="clear", description="Clear your conversation context with the bot")
+async def clear(interaction: discord.Interaction):
+    await commands.clear_command(interaction)
     
     @bot.tree.command(name="stats", description="View server or personal statistics")
-    @app_commands.describe(scope="What statistics to view")
-    @app_commands.choices(scope=[
-        app_commands.Choice(name="Server Statistics", value="server"),
-        app_commands.Choice(name="My Statistics", value="me")
-    ])
-    async def stats(interaction: discord.Interaction, scope: str = "server"):
-        await commands.stats_command(interaction, scope)
+@app_commands.describe(scope="What statistics to view")
+@app_commands.choices(scope=[
+    app_commands.Choice(name="Server Statistics", value="server"),
+    app_commands.Choice(name="My Statistics", value="me")
+])
+async def stats(interaction: discord.Interaction, scope: str = "server"):
+    await commands.stats_command(interaction, scope)
     
     @bot.tree.command(name="help", description="Show help information about bot commands")
-    async def help_cmd(interaction: discord.Interaction):
-        await commands.help_command(interaction)
-    
-    @bot.tree.command(name="export", description="Export search results to a file")
-    @app_commands.describe(
-        query="Your search query",
-        format="Export format",
-        in_channel="Optional: Search only in this channel",
-        in_thread="Optional: Search only in this thread",
-        from_date="Optional: Start date (YYYY-MM-DD)",
-        to_date="Optional: End date (YYYY-MM-DD)"
-    )
-    @app_commands.choices(format=[
-        app_commands.Choice(name="JSON", value="json"),
-        app_commands.Choice(name="CSV", value="csv"),
-        app_commands.Choice(name="Markdown", value="markdown"),
-        app_commands.Choice(name="Text", value="txt")
-    ])
-    async def export(
-        interaction: discord.Interaction,
-        query: str,
-        format: str,
-        in_channel: discord.TextChannel = None,
-        in_thread: discord.Thread = None,
-        from_date: str = None,
-        to_date: str = None
-    ):
-        await commands.export_command(interaction, query, format, in_channel, in_thread, from_date, to_date)
-    
-    @bot.tree.command(name="timemachine", description="See what happened on this day in previous years")
-    @app_commands.describe(date="Date to look back on (MM-DD or YYYY-MM-DD)")
-    async def timemachine(interaction: discord.Interaction, date: str):
-        await commands.timemachine_command(interaction, date)
+async def help_cmd(interaction: discord.Interaction):
+    await commands.help_command(interaction)
+
+@bot.tree.command(name="export", description="Export search results to a file")
+@app_commands.describe(
+    query="Your search query",
+    format="Export format",
+    in_channel="Optional: Search only in this channel",
+    in_thread="Optional: Search only in this thread",
+    from_date="Optional: Start date (YYYY-MM-DD)",
+    to_date="Optional: End date (YYYY-MM-DD)"
+)
+@app_commands.choices(format=[
+    app_commands.Choice(name="JSON", value="json"),
+    app_commands.Choice(name="CSV", value="csv"),
+    app_commands.Choice(name="Markdown", value="markdown"),
+    app_commands.Choice(name="Text", value="txt")
+])
+async def export(
+    interaction: discord.Interaction,
+    query: str,
+    format: str,
+    in_channel: discord.TextChannel = None,
+    in_thread: discord.Thread = None,
+    from_date: str = None,
+    to_date: str = None
+):
+    await commands.export_command(interaction, query, format, in_channel, in_thread, from_date, to_date)
+
+@bot.tree.command(name="timemachine", description="See what happened on this day in previous years")
+@app_commands.describe(date="Date to look back on (MM-DD or YYYY-MM-DD)")
+async def timemachine(interaction: discord.Interaction, date: str):
+    await commands.timemachine_command(interaction, date)
     
     @bot.tree.command(name="quiz", description="Start a Kahoot-style quiz based on server history")
-    @app_commands.describe(
-        num_questions="Number of questions (3-10)",
-        time_period="Time period for quiz content"
-    )
-    @app_commands.choices(time_period=[
-        app_commands.Choice(name="All Time", value="all"),
-        app_commands.Choice(name="Last 7 days", value="7d"),
-        app_commands.Choice(name="Last 30 days", value="30d"),
-        app_commands.Choice(name="Last 90 days", value="90d")
-    ])
-    async def quiz(
-        interaction: discord.Interaction,
-        num_questions: int = 5,
-        time_period: str = "all"
-    ):
-        if num_questions < 3 or num_questions > 10:
-            await interaction.response.send_message("Number of questions must be between 3 and 10.", ephemeral=True)
-            return
-        await commands.quiz_command(interaction, num_questions, time_period)
-    
-    @bot.tree.command(name="trends", description="Analyze trending topics and activity patterns")
-    @app_commands.describe(
-        timeframe="Time range (e.g., '1h', '24h', '7d')",
-        channel="Optional: Analyze specific channel only",
-        server_name="Optional: Server name (for DM use)"
-    )
-    async def trends(
-        interaction: discord.Interaction,
-        timeframe: str = "24h",
-        channel: discord.TextChannel = None,
-        server_name: str = None
-    ):
-        await commands.trends_command(interaction, timeframe, channel, server_name)
-    
-    @bot.tree.command(name="wrapped", description="Generate Spotify Wrapped-style year-end summary")
-    @app_commands.describe(year="Year to generate wrapped for (defaults to last year)")
-    async def wrapped(interaction: discord.Interaction, year: int = None):
-        await commands.wrapped_command(interaction, year)
+@app_commands.describe(
+    num_questions="Number of questions (3-10)",
+    time_period="Time period for quiz content"
+)
+@app_commands.choices(time_period=[
+    app_commands.Choice(name="All Time", value="all"),
+    app_commands.Choice(name="Last 7 days", value="7d"),
+    app_commands.Choice(name="Last 30 days", value="30d"),
+    app_commands.Choice(name="Last 90 days", value="90d")
+])
+async def quiz(
+    interaction: discord.Interaction,
+    num_questions: int = 5,
+    time_period: str = "all"
+):
+    if num_questions < 3 or num_questions > 10:
+        await interaction.response.send_message("Number of questions must be between 3 and 10.", ephemeral=True)
+        return
+    await commands.quiz_command(interaction, num_questions, time_period)
+
+@bot.tree.command(name="trends", description="Analyze trending topics and activity patterns")
+@app_commands.describe(
+    timeframe="Time range (e.g., '1h', '24h', '7d')",
+    channel="Optional: Analyze specific channel only",
+    server_name="Optional: Server name (for DM use)"
+)
+async def trends(
+    interaction: discord.Interaction,
+    timeframe: str = "24h",
+    channel: discord.TextChannel = None,
+    server_name: str = None
+):
+    await commands.trends_command(interaction, timeframe, channel, server_name)
+
+@bot.tree.command(name="wrapped", description="Generate Spotify Wrapped-style year-end summary")
+@app_commands.describe(year="Year to generate wrapped for (defaults to last year)")
+async def wrapped(interaction: discord.Interaction, year: int = None):
+    await commands.wrapped_command(interaction, year)
