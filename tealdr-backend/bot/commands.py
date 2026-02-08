@@ -1563,11 +1563,11 @@ def setup_commands(bot):
                     )
                 )
             
-            await interaction.response.send_choices(choices)
+            return choices
             
         except Exception as e:
             logger.error(f"Error in recap server autocomplete: {e}")
-            await interaction.response.send_choices([])
+            return []
 
     @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
     @app_commands.describe(

@@ -34,75 +34,6 @@ def find_server_by_name(bot, user: discord.User, server_name: str) -> Optional[d
     
     return None
 
-class ServerSelectorView(discord.ui.View):
-    """Interactive view for selecting a server in DMs."""
-    
-    def __init__(self, servers: List[discord.Guild], allow_all: bool = True, timeout: float = 180):
-        super().__init__(timeout=timeout)
-        self.selected_server = None
-        self.selected_all = False
-        
-        # Create dropdown options
-        options = []
-        
-        if allow_all:
-            options.append(
-                discord.SelectOption(
-                    label="🌐 All Servers (Multi-Search)",
-                    value="__all__",
-                    description="Search across all your servers",
-                    emoji="🔍"
-                )
-            )
-        
-        for guild in servers[:24]:  # Discord limit is 25 options, we used 1 for "All"
-            # Truncate long server names
-            name = guild.name[:100] if len(guild.name) > 100 else guild.name
-            options.append(
-                discord.SelectOption(
-                    label=name,
-                    value=str(guild.id),
-                    description=f"{guild.member_count} members" if guild.member_count else "Server",
-                    emoji="📁"
-                )
-            )
-        
-        # Add the select menu
-        select = discord.ui.Select(
-            placeholder="Choose a server to search...",
-            options=options,
-            min_values=1,
-            max_values=1
-        )
-        select.callback = self.select_callback
-        self.add_item(select)
-    
-    async def select_callback(self, interaction: discord.Interaction):
-        """Handle server selection."""
-        selected_value = interaction.data['values'][0]
-        
-        if selected_value == "__all__":
-            self.selected_all = True
-            await interaction.response.send_message(
-                "🌐 Searching across all your servers...",
-                ephemeral=True
-            )
-        else:
-            self.selected_server = int(selected_value)
-            guild = interaction.client.get_guild(self.selected_server)
-            await interaction.response.send_message(
-                f"📁 Searching in **{guild.name}**...",
-                ephemeral=True
-            )
-        
-        self.stop()
-    
-    async def on_timeout(self):
-        """Handle timeout."""
-        # Disable all items
-        for item in self.children:
-            item.disabled = True
-
 async def resolve_server_context(
     interaction: discord.Interaction,
     bot,
@@ -135,40 +66,17 @@ async def resolve_server_context(
                 # Server not found
                 return [], False
     
-    # If in DM without server_name, show picker
+    # If in DM without server_name, default to all shared servers
     servers = get_shared_servers(bot, interaction.user)
     
     if not servers:
         return [], False
     
     if len(servers) == 1:
-        # Only one shared server, use it automatically
         return servers, False
     
-    # Show interactive picker
-    view = ServerSelectorView(servers, allow_all=allow_multi)
-    
-    embed = discord.Embed(
-        title="🔍 Select Server",
-        description="Which server would you like to search?",
-        color=discord.Color.blue()
-    )
-    embed.add_field(
-        name="Your Servers",
-        value=f"You share **{len(servers)}** server(s) with me.",
-        inline=False
-    )
-    
-    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-    
-    # Wait for selection
-    await view.wait()
-    
-    if view.selected_all:
+    # Multiple servers — search across all of them
+    if allow_multi:
         return servers, True
-    elif view.selected_server:
-        guild = bot.get_guild(view.selected_server)
-        return [guild] if guild else [], False
     else:
-        # Timeout or no selection
-        return [], False
+        return [servers[0]], False
