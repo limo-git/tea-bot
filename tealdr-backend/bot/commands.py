@@ -941,6 +941,14 @@ class BotCommands:
         """Run the quiz with questions."""
         try:
             scores = {}
+            reactions = ['1\ufe0f\u20e3', '2\ufe0f\u20e3', '3\ufe0f\u20e3', '4\ufe0f\u20e3']
+            channel = interaction.channel
+            
+            # Delete the "Generating..." status message
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
             
             for i, question in enumerate(questions, 1):
                 # Create question embed
@@ -951,31 +959,35 @@ class BotCommands:
                 )
                 
                 options_text = "\n".join([
-                    f"**{chr(65+j)})** {opt}"
+                    f"**{reactions[j]} {chr(65+j)})** {opt}"
                     for j, opt in enumerate(question['options'])
                 ])
                 embed.add_field(name="Options:", value=options_text, inline=False)
                 embed.add_field(name="⏱️", value="You have 20 seconds to answer!", inline=False)
-                embed.set_footer(text=f"React with \U0001F1E6 \U0001F1E7 \U0001F1E8 or \U0001F1E9 to answer!")
+                embed.set_footer(text="React with 1️⃣ 2️⃣ 3️⃣ or 4️⃣ to answer!")
                 
-                await status_msg.edit(embed=embed)
+                # Send as a new message in the channel
+                question_msg = await channel.send(embed=embed)
                 
-                # Add reaction options using correct Discord emoji names
-                reactions = ['\U0001F1E6', '\U0001F1E7', '\U0001F1E8', '\U0001F1E9']
+                # Add reaction options
                 for reaction in reactions:
-                    await status_msg.add_reaction(reaction)
+                    try:
+                        await question_msg.add_reaction(reaction)
+                    except Exception as e:
+                        logger.error(f"Failed to add reaction {reaction}: {e}")
                 
                 # Wait for answers (20 seconds)
                 await asyncio.sleep(20)
                 
                 # Fetch message to get reactions
-                status_msg = await status_msg.channel.fetch_message(status_msg.id)
+                question_msg = await channel.fetch_message(question_msg.id)
                 
                 # Check answers
-                correct_emoji = reactions[ord(question['correct']) - ord('A')]
+                correct_idx = ord(question['correct']) - ord('A')
+                correct_emoji = reactions[correct_idx]
                 logger.info(f"Question {i}: Correct answer is {question['correct']}) - {correct_emoji}")
                 
-                for reaction in status_msg.reactions:
+                for reaction in question_msg.reactions:
                     if str(reaction.emoji) in reactions:
                         users = [user async for user in reaction.users() if not user.bot]
                         logger.info(f"Reaction {reaction.emoji}: {len(users)} users reacted")
@@ -990,10 +1002,10 @@ class BotCommands:
                 
                 logger.info(f"Scores after question {i}: {scores}")
                 
-                # Show answer
+                # Show answer by editing the question message
                 answer_embed = discord.Embed(
                     title=f"✅ Answer for Question {i}",
-                    description=f"**Correct Answer:** {question['correct']}) {question['options'][ord(question['correct']) - ord('A')]}",
+                    description=f"**Correct Answer:** {question['correct']}) {question['options'][correct_idx]}",
                     color=discord.Color.green()
                 )
                 answer_embed.add_field(
@@ -1002,8 +1014,11 @@ class BotCommands:
                     inline=False
                 )
                 
-                await status_msg.clear_reactions()
-                await status_msg.edit(embed=answer_embed)
+                try:
+                    await question_msg.clear_reactions()
+                except Exception:
+                    pass
+                await question_msg.edit(embed=answer_embed)
                 await asyncio.sleep(5)
             
             # Show final scores
@@ -1025,17 +1040,17 @@ class BotCommands:
                     )
                 
                 leaderboard_embed.set_footer(text=f"Quiz created by {interaction.user.display_name}")
-                await status_msg.edit(embed=leaderboard_embed)
+                await channel.send(embed=leaderboard_embed)
             else:
                 no_players_embed = discord.Embed(
                     title="🎮 Quiz Complete",
                     description="No one participated in the quiz!",
                     color=discord.Color.orange()
                 )
-                await status_msg.edit(embed=no_players_embed)
+                await channel.send(embed=no_players_embed)
             
         except Exception as e:
-            logger.error(f"Error running quiz: {e}")
+            logger.error(f"Error running quiz: {e}", exc_info=True)
     
     async def wrapped_command(self, interaction: discord.Interaction, year: int = None):
         """Generate Spotify Wrapped-style year-end summary."""
