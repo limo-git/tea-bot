@@ -1559,14 +1559,14 @@ def setup_commands(bot):
             await interaction.response.send_choices([])
 
     @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
-@app_commands.describe(
+    @app_commands.describe(
     time="Time range (e.g., '1h', '30m', '2d', '1w')",
     user="Optional: Specific user to recap",
     channel="Optional: Specific channel to recap",
     server_name="Optional: Server name (for DM use)"
 )
-@app_commands.autocomplete(server_name=recap_server_autocomplete)
-async def recap(
+    @app_commands.autocomplete(server_name=recap_server_autocomplete)
+    async def recap(
     interaction: discord.Interaction,
     time: str,
     user: discord.User = None,
