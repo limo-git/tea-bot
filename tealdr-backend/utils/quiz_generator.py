@@ -1,3 +1,4 @@
+import re
 import random
 from datetime import datetime, timedelta
 from utils.logger import get_logger
@@ -69,53 +70,70 @@ Generate {num_questions} questions now:"""
     
     @staticmethod
     def _parse_questions(response):
-        """Parse AI-generated questions."""
+        """Parse AI-generated questions with robust pattern matching."""
         questions = []
         lines = response.split('\n')
         
         current_question = {}
         
+        # Patterns to match various AI formatting styles
+        q_pattern = re.compile(r'^\*{0,2}Q\d*[:\.]?\*{0,2}\s*(.*)', re.IGNORECASE)
+        opt_pattern = re.compile(r'^\*{0,2}([A-D])[)\.]\*{0,2}\s*(.*)', re.IGNORECASE)
+        answer_pattern = re.compile(r'^\*{0,2}ANSWER\s*[:\.]?\*{0,2}\s*([A-D])', re.IGNORECASE)
+        explanation_pattern = re.compile(r'^\*{0,2}EXPLANATION\s*[:\.]?\*{0,2}\s*(.*)', re.IGNORECASE)
+        
         for line in lines:
             line = line.strip()
+            if not line:
+                continue
             
-            if line.startswith('Q:'):
+            q_match = q_pattern.match(line)
+            if q_match:
                 if current_question and 'question' in current_question:
                     questions.append(current_question)
-                current_question = {'question': line[2:].strip()}
+                current_question = {'question': q_match.group(1).strip()}
+                continue
             
-            elif line.startswith('A)'):
-                current_question['options'] = [line[2:].strip()]
-            elif line.startswith('B)'):
-                if 'options' in current_question:
-                    current_question['options'].append(line[2:].strip())
-            elif line.startswith('C)'):
-                if 'options' in current_question:
-                    current_question['options'].append(line[2:].strip())
-            elif line.startswith('D)'):
-                if 'options' in current_question:
-                    current_question['options'].append(line[2:].strip())
+            opt_match = opt_pattern.match(line)
+            if opt_match:
+                letter = opt_match.group(1).upper()
+                text = opt_match.group(2).strip()
+                if letter == 'A':
+                    current_question['options'] = [text]
+                elif 'options' in current_question:
+                    current_question['options'].append(text)
+                continue
             
-            elif line.startswith('ANSWER:'):
-                answer = line[7:].strip().upper()
-                if answer in ['A', 'B', 'C', 'D']:
-                    current_question['correct'] = answer
+            ans_match = answer_pattern.match(line)
+            if ans_match:
+                current_question['correct'] = ans_match.group(1).upper()
+                continue
             
-            elif line.startswith('EXPLANATION:'):
-                current_question['explanation'] = line[12:].strip()
+            exp_match = explanation_pattern.match(line)
+            if exp_match:
+                current_question['explanation'] = exp_match.group(1).strip()
+                continue
         
         # Add last question
         if current_question and 'question' in current_question:
             questions.append(current_question)
         
-        # Validate questions
+        logger.info(f"Parsed {len(questions)} raw questions from AI response")
+        
+        # Validate questions — fill in missing explanation with default
         valid_questions = []
         for q in questions:
+            if not q.get('explanation'):
+                q['explanation'] = 'No explanation provided.'
             if (q.get('question') and 
                 q.get('options') and len(q.get('options', [])) == 4 and
-                q.get('correct') and
-                q.get('explanation')):
+                q.get('correct')):
                 valid_questions.append(q)
+            else:
+                logger.warning(f"Dropped invalid question: {q.get('question', 'N/A')[:50]} — "
+                              f"options={len(q.get('options', []))}, correct={q.get('correct')}")
         
+        logger.info(f"{len(valid_questions)} valid questions after validation")
         return valid_questions
     
     @staticmethod

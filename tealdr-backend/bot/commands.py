@@ -926,6 +926,8 @@ class BotCommands:
                 await status_msg.edit(embed=error_embed)
                 return
             
+            logger.info(f"Quiz generated with {len(questions)} questions (requested {num_questions})")
+            
             # Start quiz
             await self._run_quiz(interaction, questions, status_msg)
             
