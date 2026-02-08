@@ -399,9 +399,11 @@ class BotCommands:
                     limit=100
                 )
             else:
+                # In a server, filter by current channel; in DMs, search all channels
+                channel_id = interaction.channel.id if interaction.guild else None
                 messages = await supabase_client.get_messages_by_timerange(
                     server_id=guild.id,
-                    channel_id=interaction.channel.id,
+                    channel_id=channel_id,
                     start_time=start_time,
                     end_time=end_time,
                     limit=100
@@ -436,8 +438,10 @@ class BotCommands:
                 location = f" for {user.mention}"
             elif channel:
                 location = f" in {channel.mention}"
-            else:
+            elif interaction.guild:
                 location = f" in this channel"
+            else:
+                location = f" in **{guild.name}**"
             
             # Create rich embed for recap
             recap_embed = embed_builder.create_recap_embed(
