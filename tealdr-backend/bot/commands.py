@@ -1658,8 +1658,8 @@ async def export(
 @app_commands.describe(date="Date to look back on (MM-DD or YYYY-MM-DD)")
 async def timemachine(interaction: discord.Interaction, date: str):
     await commands.timemachine_command(interaction, date)
-    
-    @bot.tree.command(name="quiz", description="Start a Kahoot-style quiz based on server history")
+
+@bot.tree.command(name="quiz", description="Start a Kahoot-style quiz based on server history")
 @app_commands.describe(
     num_questions="Number of questions (3-10)",
     time_period="Time period for quiz content"
