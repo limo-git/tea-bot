@@ -16,35 +16,25 @@ _client: genai.Client | None = None
 
 INTENT_TYPES = ["lookup", "relational", "evolutionary", "expert_finding", "summarization"]
 
-QUERY_UNDERSTANDING_PROMPT = """You are a query understanding system for a Discord knowledge graph.
+QUERY_UNDERSTANDING_PROMPT = """Analyze this query and return ONLY valid JSON (no markdown, no explanation):
 
-A user asked: "{query}"
+Query: "{query}"
 
-Analyze this query and return ONLY valid JSON — no explanation, no markdown.
-
-JSON Schema:
+Return:
 {{
   "intent": "lookup | relational | evolutionary | expert_finding | summarization",
-  "primary_entity": "string (main entity name the query is about, lowercase)",
-  "primary_entity_type": "person | topic | technology | decision | bug | question | project | null",
-  "secondary_entity": "string or null (second entity for relational queries)",
-  "secondary_entity_type": "string or null",
-  "search_terms": ["list", "of", "keywords", "for", "fallback", "search"]
+  "primary_entity": "main entity (lowercase)",
+  "primary_entity_type": "person | topic | technology | null",
+  "search_terms": ["keywords"]
 }}
 
-Intent definitions:
-- lookup: find information about a specific entity OR what a person said about a topic
-- relational: find connection/path between TWO DIFFERENT entities (not person + topic)
-- evolutionary: how has an entity or topic changed over time
-- expert_finding: who knows about a topic / who to ask
-- summarization: give me everything about a topic OR everything a person discussed
+Intent guide:
+- "what did X say about Y" → summarization
+- "who knows X" → expert_finding
+- "how are X and Y related" → relational
+- "tell me about X" → lookup
 
-IMPORTANT:
-- If query asks "what did [person] say/talk about [topic]" → use "summarization" intent, primary_entity=[person], search_terms=[topic]
-- If query asks "how are X and Y related" → use "relational" intent
-- If query asks "who knows about X" → use "expert_finding" intent
-
-Return only the JSON:"""
+JSON only:"""
 
 
 def _get_client() -> genai.Client:
@@ -77,7 +67,26 @@ async def understand_query(query: str) -> dict:
                 raw = raw[4:]
             raw = raw.strip()
 
-        result = json.loads(raw)
+        # Try to parse JSON, with recovery for truncated responses
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Query understanding JSON parse failed, attempting recovery: {e}")
+            # Try to close incomplete JSON
+            fixed = raw.rstrip()
+            if not fixed.endswith("}"):
+                # Add missing closing braces
+                open_braces = fixed.count("{") - fixed.count("}")
+                open_brackets = fixed.count("[") - fixed.count("]")
+                fixed += "]" * open_brackets
+                fixed += "}" * open_braces
+            try:
+                result = json.loads(fixed)
+                logger.info("Recovered partial JSON from query understanding")
+            except:
+                logger.error("Could not recover query understanding JSON, using defaults")
+                result = {}
+        
         result.setdefault("intent", "summarization")
         result.setdefault("primary_entity", "")
         result.setdefault("primary_entity_type", None)
