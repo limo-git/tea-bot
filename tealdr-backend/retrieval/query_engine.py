@@ -33,11 +33,16 @@ JSON Schema:
 }}
 
 Intent definitions:
-- lookup: find information about a specific entity
-- relational: find connection/path between two entities
+- lookup: find information about a specific entity OR what a person said about a topic
+- relational: find connection/path between TWO DIFFERENT entities (not person + topic)
 - evolutionary: how has an entity or topic changed over time
 - expert_finding: who knows about a topic / who to ask
-- summarization: give me everything about a topic
+- summarization: give me everything about a topic OR everything a person discussed
+
+IMPORTANT:
+- If query asks "what did [person] say/talk about [topic]" → use "summarization" intent, primary_entity=[person], search_terms=[topic]
+- If query asks "how are X and Y related" → use "relational" intent
+- If query asks "who knows about X" → use "expert_finding" intent
 
 Return only the JSON:"""
 
