@@ -77,11 +77,13 @@ class BotEvents:
             is_thread = isinstance(message.channel, discord.Thread)
             thread_id = message.channel.id if is_thread else None
             parent_channel_id = message.channel.parent_id if is_thread else message.channel.id
+            channel_name = message.channel.parent.name if is_thread else message.channel.name
             
             message_data = {
                 'message_id': message.id,
                 'server_id': message.guild.id,
                 'channel_id': parent_channel_id,
+                'channel_name': channel_name,
                 'thread_id': thread_id,
                 'is_thread_message': is_thread,
                 'author_id': message.author.id,
@@ -111,12 +113,35 @@ class BotEvents:
                         message_content=message.content
                     )
                     logger.info(f"Tracked bug discussion in message {message.id}")
+
+                # Graph RAG: queue message for entity extraction (non-blocking)
+                if Config.GRAPH_RAG_ENABLED:
+                    import asyncio
+                    asyncio.create_task(self._extract_graph_entities(message_data))
             else:
                 logger.warning(f"Failed to generate embedding for message {message.id}")
         
         except Exception as e:
             logger.error(f"Error processing message {message.id}: {e}")
     
+    async def _extract_graph_entities(self, message_data: dict):
+        """Non-blocking: extract entities from a single message and update the graph."""
+        try:
+            from extraction.entity_extractor import extract_entities_from_chunk, format_messages_for_extraction
+            from graph.builder import build_graph_from_extraction
+            chunk_text = format_messages_for_extraction([message_data])
+            chunk_metadata = {
+                "channel_id": message_data.get("channel_id"),
+                "channel_name": message_data.get("channel_name", "unknown"),
+                "guild_id": message_data.get("server_id"),
+                "start_time": str(message_data.get("created_at", "")),
+                "end_time": str(message_data.get("created_at", "")),
+            }
+            extraction = await extract_entities_from_chunk(chunk_text, chunk_metadata)
+            await build_graph_from_extraction(extraction, [message_data])
+        except Exception as e:
+            logger.error(f"Graph entity extraction failed for message {message_data.get('message_id')}: {e}", exc_info=True)
+
     async def on_reaction_add(self, reaction: discord.Reaction, user: discord.User):
         """Handle reactions to bot messages for feedback."""
         if user.bot:

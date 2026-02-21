@@ -13,6 +13,21 @@ class Config:
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     MESSAGE_RETENTION_DAYS = int(os.getenv('MESSAGE_RETENTION_DAYS', '30'))
     CLEANUP_INTERVAL_HOURS = int(os.getenv('CLEANUP_INTERVAL_HOURS', '24'))
+
+    # Gemini model for Graph RAG (reuses GEMINI_API_KEY)
+    GRAPH_RAG_MODEL = os.getenv('GRAPH_RAG_MODEL', 'gemini-3-flash-preview')
+
+    # Neo4j (Graph RAG)
+    NEO4J_URI = os.getenv('NEO4J_URI', '')
+    NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
+    NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', '')
+
+    # Graph RAG tuning
+    EXPERT_IN_THRESHOLD = int(os.getenv('EXPERT_IN_THRESHOLD', '5'))
+    CHUNK_WINDOW_MINUTES = int(os.getenv('CHUNK_WINDOW_MINUTES', '15'))
+    RELATIONSHIP_DECAY_DAYS = int(os.getenv('RELATIONSHIP_DECAY_DAYS', '30'))
+    VECTOR_TOP_K = int(os.getenv('VECTOR_TOP_K', '10'))
+    GRAPH_RAG_ENABLED = os.getenv('GRAPH_RAG_ENABLED', 'false').lower() == 'true'
     
     @classmethod
     def validate(cls):

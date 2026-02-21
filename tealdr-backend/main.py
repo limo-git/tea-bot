@@ -12,6 +12,30 @@ from bot.dm_commands import register_dm_commands
 setup_logger()
 logger = get_logger(__name__)
 
+
+async def _init_graph_rag(bot):
+    """Initialize Neo4j schema and start Graph RAG background jobs."""
+    try:
+        from graph.schema import setup_schema
+        await setup_schema()
+        logger.info("Neo4j schema initialized")
+    except Exception as e:
+        logger.error(f"Neo4j schema setup failed: {e} — Graph RAG will be disabled")
+        Config.GRAPH_RAG_ENABLED = False
+        return
+
+    try:
+        from jobs.chunker_job import start_chunker_job
+        from jobs.decay_job import start_decay_job
+        from jobs.summary_job import start_summary_job
+        start_chunker_job(bot)
+        start_decay_job(bot)
+        start_summary_job(bot)
+        logger.info("Graph RAG background jobs started")
+    except Exception as e:
+        logger.error(f"Failed to start Graph RAG jobs: {e}")
+
+
 def main():
     try:
         Config.validate()
@@ -20,27 +44,46 @@ def main():
         logger.error(f"Configuration error: {e}")
         logger.error("Please check your .env file and ensure all required variables are set")
         sys.exit(1)
-    
+
     intents = discord.Intents.default()
     intents.message_content = True
     intents.guilds = True
     intents.messages = True
     intents.members = True
     intents.presences = True
-    
+
     bot = commands.Bot(command_prefix="!", intents=intents)
-    
+
     setup_events(bot)
     setup_commands(bot)
     register_dm_commands(bot)
-    
+
+    @bot.event
+    async def on_ready_graph_rag():
+        if Config.GRAPH_RAG_ENABLED:
+            logger.info("Graph RAG enabled — initializing Neo4j and background jobs...")
+            await _init_graph_rag(bot)
+        else:
+            logger.info("Graph RAG disabled — using Gemini + pgvector only")
+
+    # Hook Graph RAG init into the existing on_ready via setup_hook
+    original_setup_hook = bot.setup_hook
+
+    async def setup_hook():
+        if original_setup_hook:
+            await original_setup_hook()
+        if Config.GRAPH_RAG_ENABLED:
+            bot.loop.create_task(_init_graph_rag(bot))
+
+    bot.setup_hook = setup_hook
+
     def signal_handler(sig, frame):
         logger.info("Received shutdown signal, closing bot...")
         asyncio.create_task(bot.close())
-    
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     try:
         logger.info("Starting Discord bot...")
         bot.run(Config.DISCORD_BOT_TOKEN)
