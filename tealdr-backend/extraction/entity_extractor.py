@@ -94,7 +94,7 @@ async def extract_entities_from_chunk(chunk_text: str, chunk_metadata: dict) -> 
             lambda: client.models.generate_content(
                 model="gemini-3-flash-preview",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=2048),
+                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=4096),
             )
         )
 
