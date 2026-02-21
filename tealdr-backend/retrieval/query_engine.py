@@ -67,7 +67,7 @@ async def understand_query(query: str) -> dict:
             lambda: client.models.generate_content(
                 model="gemini-3-flash-preview",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=512),
+                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=1024),
             )
         )
         raw = response.text.strip()
