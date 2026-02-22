@@ -70,14 +70,18 @@ Extract entities and relationships from these messages. Return ONLY valid JSON m
 Return only the JSON object:"""
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-async def extract_entities_from_chunk(chunk_text: str, chunk_metadata: dict) -> dict[str, Any]:
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=4, max=60),
+    reraise=True
+)
+async def extract_entities_from_chunk(chunk_text: str, chunk_metadata: dict) -> dict:
     """
-    Extract entities and relationships from a chunk of Discord messages using Gemini.
+    Extract entities, relationships, and metadata from a chunk of messages.
 
     Args:
-        chunk_text: Formatted string of messages in the chunk
-        chunk_metadata: Dict with channel_id, channel_name, start_time, end_time
+        chunk_text: Formatted messages from format_messages_for_extraction()
+        chunk_metadata: Dict with channel_id, guild_id, start_time, end_time
 
     Returns:
         Dict with entities, relationships, sentiment, importance_score
