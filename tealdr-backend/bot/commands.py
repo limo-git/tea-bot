@@ -282,51 +282,44 @@ class BotCommands:
                     inline=False
                 )
             
-            # Add message count and filters to first embed
-            if embeds:
-                sources_text = f"{len(messages)} messages analyzed" if len(messages) > 0 else "No indexed messages yet — answering from general knowledge"
-                embeds[0].add_field(
-                    name="📊 Sources",
-                    value=sources_text,
-                    inline=True
-                )
-                
-                # Add active filters info
-                active_filters = []
-                if in_channel:
-                    active_filters.append(f"Channel: {in_channel.mention}")
-                if in_thread:
-                    active_filters.append(f"Thread: {in_thread.mention}")
-                if from_date or to_date:
-                    date_range = f"{from_date or '...'} to {to_date or '...'}"
-                    active_filters.append(f"Dates: {date_range}")
-                if min_length:
-                    active_filters.append(f"Min length: {min_length} chars")
-                
-                if active_filters:
-                    embeds[0].add_field(
-                        name="🔍 Filters",
-                        value="\n".join(active_filters),
-                        inline=True
-                    )
-                
-                # Generate and add smart suggestions
-                try:
-                    suggestions = await smart_suggestions.generate_suggestions(
-                        query=query,
-                        messages=messages,
-                        mentioned_user=mentioned_user
-                    )
+            # Add sources with exact message quotes and dates
+            if embeds and len(messages) > 0:
+                # Format sources as exact quotes with dates
+                sources_lines = []
+                for msg in messages[:10]:  # Show up to 10 sources
+                    author = msg.get("author_name") or msg.get("author", "Unknown")
+                    content = msg.get("content", "")
+                    timestamp = msg.get("created_at") or msg.get("timestamp", "")
                     
-                    if suggestions:
-                        suggestions_text = "\n".join([f"• {s}" for s in suggestions[:5]])
-                        embeds[-1].add_field(  # Add to last embed
-                            name="💡 You might also ask:",
-                            value=suggestions_text,
-                            inline=False
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to generate suggestions: {e}")
+                    # Format timestamp to readable date
+                    if timestamp:
+                        try:
+                            from datetime import datetime
+                            if isinstance(timestamp, str):
+                                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                            else:
+                                dt = timestamp
+                            date_str = dt.strftime("%b %d, %Y")
+                        except:
+                            date_str = str(timestamp)[:10]
+                    else:
+                        date_str = "Unknown date"
+                    
+                    # Truncate long messages
+                    if len(content) > 100:
+                        content = content[:100] + "..."
+                    
+                    sources_lines.append(f"**{author}** ({date_str}): \"{content}\"")
+                
+                sources_text = "\n".join(sources_lines)
+                if len(sources_text) > 1024:  # Discord field limit
+                    sources_text = sources_text[:1020] + "..."
+                
+                embeds[-1].add_field(  # Add to last embed
+                    name="� Sources",
+                    value=sources_text,
+                    inline=False
+                )
             
             # Send with pagination if multiple embeds
             if len(embeds) > 1:

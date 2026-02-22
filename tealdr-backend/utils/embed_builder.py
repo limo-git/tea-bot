@@ -17,13 +17,6 @@ class EmbedBuilder:
             timestamp=datetime.utcnow()
         )
         
-        # Add query info
-        embed.add_field(
-            name="📝 Your Query",
-            value=f"`{query}`",
-            inline=False
-        )
-        
         # Add context indicator
         if has_context:
             embed.add_field(
@@ -104,11 +97,7 @@ class EmbedBuilder:
             timestamp=datetime.utcnow()
         )
         
-        embed.add_field(
-            name="Your Query",
-            value=f"`{query}`",
-            inline=False
-        )
+        pass  # Query field removed per user request
         
         embed.add_field(
             name="💡 Try:",
@@ -197,12 +186,8 @@ class EmbedBuilder:
                 timestamp=datetime.utcnow()
             )
             
-            if i == 1:  # Only add query on first page
-                embed.add_field(
-                    name="📝 Your Query",
-                    value=f"`{query}`",
-                    inline=False
-                )
+            # Query field removed per user request
+            pass
             
             embed.set_footer(
                 text=f"Page {i}/{len(chunks)} • Requested by {user.display_name}",

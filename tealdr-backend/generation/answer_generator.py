@@ -17,14 +17,6 @@ ANSWER_PROMPT = """{persona}
 ## Your Role
 You are an intelligent assistant for a Discord server. You answer questions using retrieved messages and knowledge graph data from the server's chat history. Your answers are grounded — you only state what is supported by the context below.
 
-## User Question
-**{user_name}** asked:
-> {query}
-
-## Query Analysis
-- **Intent**: {intent}
-- **Topic**: {primary_entity}
-
 ## Retrieved Context
 The following messages and graph data were retrieved as most relevant to this question. Items marked `[graph]` come from the knowledge graph (structurally relevant). Items marked `[search]` come from semantic vector search.
 
@@ -34,7 +26,7 @@ The following messages and graph data were retrieved as most relevant to this qu
 
 ## Instructions
 1. **Answer directly and completely** using only the context above.
-2. **Cite sources** — mention the author's name and channel when referencing specific messages (e.g., "@alice in #general").
+2. **Use readable names** — Always use the actual username (e.g., "limo.ew") and channel name (e.g., "#the-lounge"), never use IDs or @mentions.
 3. **For expert_finding intent** — list the people who know about this topic and how often they've discussed it.
 4. **For relational intent** — explain the connection/path between the two entities clearly.
 5. **For evolutionary intent** — describe how the topic changed over time chronologically.
@@ -43,7 +35,7 @@ The following messages and graph data were retrieved as most relevant to this qu
 8. **If context is insufficient** — say so briefly and suggest what the user could search for instead.
 9. **Never fabricate** — do not add information not present in the context.
 
-Answer **{user_name}**'s question now:"""
+Answer the question now:"""
 
 
 def _get_client() -> genai.Client:
@@ -104,7 +96,7 @@ async def generate_answer(
             lambda: client.models.generate_content(
                 model="gemini-3-flash-preview",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=1500),
+                config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=4096),
             )
         )
         answer = response.text.strip()
