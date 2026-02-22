@@ -292,6 +292,21 @@ class BotCommands:
                     content = msg.get("content", "")
                     timestamp = msg.get("created_at") or msg.get("timestamp", "")
                     
+                    # Get channel name
+                    channel_id = msg.get("channel_id")
+                    channel_name = None
+                    if channel_id:
+                        try:
+                            channel = guild.get_channel(int(channel_id))
+                            if channel:
+                                channel_name = f"#{channel.name}"
+                        except:
+                            pass
+                    if not channel_name:
+                        channel_name = msg.get("channel", "")
+                        if channel_name and not channel_name.startswith("#"):
+                            channel_name = f"#{channel_name}"
+                    
                     # Format timestamp to readable date
                     if timestamp:
                         try:
@@ -310,14 +325,18 @@ class BotCommands:
                     if len(content) > 100:
                         content = content[:100] + "..."
                     
-                    sources_lines.append(f"**{author}** ({date_str}): \"{content}\"")
+                    # Format with channel name if available
+                    if channel_name:
+                        sources_lines.append(f"**{author}** in {channel_name} ({date_str}): \"{content}\"")
+                    else:
+                        sources_lines.append(f"**{author}** ({date_str}): \"{content}\"")
                 
                 sources_text = "\n".join(sources_lines)
                 if len(sources_text) > 1024:  # Discord field limit
                     sources_text = sources_text[:1020] + "..."
                 
                 embeds[-1].add_field(  # Add to last embed
-                    name="� Sources",
+                    name="📊 Sources",
                     value=sources_text,
                     inline=False
                 )
