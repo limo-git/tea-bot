@@ -179,6 +179,7 @@ class BotCommands:
                         author_id=mentioned_user.id if mentioned_user else None,
                         channel_id=in_channel.id if in_channel else None,
                         time_range=time_range,
+                        author_username=mentioned_user.name if mentioned_user else None,
                     )
                     response = await generate_answer(
                         query=query,

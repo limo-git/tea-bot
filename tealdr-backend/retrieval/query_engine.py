@@ -157,6 +157,7 @@ async def run_query_pipeline(
     author_id: int = None,
     channel_id: int = None,
     time_range: tuple = None,
+    author_username: str = None,
 ) -> dict:
     """
     Full 5-step Graph RAG query pipeline.
@@ -172,6 +173,11 @@ async def run_query_pipeline(
     # Step 1 — Query understanding
     understanding = await understand_query(query)
     intent = understanding["intent"]
+    
+    # Override entity with actual username if provided (fixes Discord mention parsing)
+    if author_username and understanding.get("primary_entity", "").startswith("<@"):
+        understanding["primary_entity"] = author_username
+        logger.info(f"Overriding entity from mention to username: {author_username}")
 
     # Step 2 — Graph traversal
     graph_results = await graph_traversal(intent, understanding)
