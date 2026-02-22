@@ -58,10 +58,9 @@ LIMIT 10
 
 # ── summarization ─────────────────────────────────────────────────────────────
 SUMMARIZATION_QUERY = """
-// Try to find by author first
-MATCH (author:Author)
+// Find messages by author
+MATCH (author:Author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
 WHERE toLower(author.username) CONTAINS toLower($entity_name)
-OPTIONAL MATCH (author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
 RETURN m.content AS content,
        m.timestamp AS timestamp,
        c.name AS channel,
@@ -72,14 +71,13 @@ LIMIT 50
 UNION
 
 // Also search by entity mentions
-MATCH (e:Entity)
+MATCH (e:Entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
 WHERE toLower(e.name) CONTAINS toLower($entity_name)
-MATCH (e)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
 OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
 RETURN m2.content AS content,
        m2.timestamp AS timestamp,
        c2.name AS channel,
-       a2.username AS author
+       COALESCE(a2.username, 'Unknown') AS author
 ORDER BY m2.timestamp DESC
 LIMIT 50
 """

@@ -18,6 +18,14 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             logger.warning("Failed to generate query embedding for vector search")
             return []
 
+        # If no explicit time range, default to last 7 days for "recently" queries
+        if time_range is None:
+            from datetime import datetime, timedelta
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(days=7)
+            time_range = (start_time, end_time)
+            logger.info(f"No time range specified, defaulting to last 7 days for recency")
+
         results = await supabase_client.semantic_search_filtered(
             embedding=embedding,
             server_id=server_id,
