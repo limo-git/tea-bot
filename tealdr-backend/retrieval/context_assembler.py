@@ -57,8 +57,23 @@ def assemble_context(graph_results: list[dict], vector_results: list[dict], inte
                 "relevance": float(msg.get("similarity", 0.5)),
             })
 
-    # Sort: graph results first, then by similarity descending
-    unified.sort(key=lambda x: (0 if x["source"] == "graph" else 1, -x["relevance"]))
+    # Sort: graph results first, then by timestamp descending (most recent first)
+    def sort_key(x):
+        source_priority = 0 if x["source"] == "graph" else 1
+        # Parse timestamp for sorting, default to very old date if missing
+        ts = x.get("timestamp", "")
+        try:
+            from datetime import datetime
+            if isinstance(ts, str):
+                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+            else:
+                dt = ts
+            timestamp_value = dt.timestamp()
+        except:
+            timestamp_value = 0
+        return (source_priority, -timestamp_value)  # Negative for descending order
+    
+    unified.sort(key=sort_key)
 
     logger.info(f"Context assembled: {len(unified)} items ({sum(1 for x in unified if x['source']=='graph')} graph, {sum(1 for x in unified if x['source']=='vector')} vector)")
     return unified[:30]  # Cap at 30 context items to stay within token limits
