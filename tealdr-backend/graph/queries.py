@@ -59,27 +59,28 @@ LIMIT 10
 # ── summarization ─────────────────────────────────────────────────────────────
 SUMMARIZATION_QUERY = """
 // Try to find by author first
-OPTIONAL MATCH (author:Author)
+MATCH (author:Author)
 WHERE toLower(author.username) CONTAINS toLower($entity_name)
-WITH author
 OPTIONAL MATCH (author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
-WITH collect({content: m.content, timestamp: m.timestamp, channel: c.name, author: author.username}) AS author_messages
+RETURN m.content AS content,
+       m.timestamp AS timestamp,
+       c.name AS channel,
+       author.username AS author
+ORDER BY m.timestamp DESC
+LIMIT 50
 
-// If no author found, search by entity mentions
-OPTIONAL MATCH (e:Entity)
+UNION
+
+// Also search by entity mentions
+MATCH (e:Entity)
 WHERE toLower(e.name) CONTAINS toLower($entity_name)
-WITH author_messages, e
-OPTIONAL MATCH (e)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
+MATCH (e)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
 OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
-WITH author_messages + collect({content: m2.content, timestamp: m2.timestamp, channel: c2.name, author: a2.username}) AS all_messages
-
-UNWIND all_messages AS msg
-WITH msg WHERE msg.content IS NOT NULL
-RETURN msg.content AS content,
-       msg.timestamp AS timestamp,
-       msg.channel AS channel,
-       msg.author AS author
-ORDER BY msg.timestamp DESC
+RETURN m2.content AS content,
+       m2.timestamp AS timestamp,
+       c2.name AS channel,
+       a2.username AS author
+ORDER BY m2.timestamp DESC
 LIMIT 50
 """
 

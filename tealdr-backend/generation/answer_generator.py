@@ -94,7 +94,7 @@ async def generate_answer(
         response = await loop.run_in_executor(
             None,
             lambda: client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model="gemini-2.5-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=4096),
             )
