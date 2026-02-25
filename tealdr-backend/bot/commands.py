@@ -464,15 +464,52 @@ class BotCommands:
             
             persona = await server_settings_client.get_bot_persona(guild.id)
             requester_name = interaction.user.display_name
-            formatted_messages = format_messages_for_ai(messages)
             
-            prompt = RECAP_PROMPT.format(
-                persona=persona,
-                requester=requester_name,
-                messages=formatted_messages
-            )
+            # Try Graph RAG first for better context
+            response = None
+            if Config.GRAPH_RAG_ENABLED and len(messages) > 0:
+                try:
+                    from retrieval.context_assembler import format_context_for_prompt
+                    # Convert messages to context format
+                    context_items = []
+                    for msg in messages:
+                        context_items.append({
+                            "source": "vector",
+                            "content": msg.get("content", ""),
+                            "author": msg.get("author_name", "Unknown"),
+                            "channel": str(msg.get("channel_id", "")),
+                            "timestamp": str(msg.get("created_at", "")),
+                            "relevance": 1.0
+                        })
+                    
+                    context_str = format_context_for_prompt(context_items)
+                    prompt = RECAP_PROMPT.format(
+                        persona=persona,
+                        requester=requester_name,
+                        messages=context_str
+                    )
+                    
+                    from generation.answer_generator import generate_answer
+                    response = await generate_answer(
+                        query=f"recap {time}",
+                        pipeline_result={"context": context_items, "understanding": {}},
+                        user_name=requester_name,
+                        persona=persona
+                    )
+                    logger.info(f"Recap generated with Graph RAG answer generator")
+                except Exception as e:
+                    logger.warning(f"Graph RAG recap failed, falling back to Gemini: {e}")
+                    response = None
             
-            response = await gemini_client.generate_response(prompt)
+            # Fallback to Gemini
+            if response is None:
+                formatted_messages = format_messages_for_ai(messages)
+                prompt = RECAP_PROMPT.format(
+                    persona=persona,
+                    requester=requester_name,
+                    messages=formatted_messages
+                )
+                response = await gemini_client.generate_response(prompt)
             
             # Determine location text
             location = ""
@@ -826,28 +863,50 @@ class BotCommands:
                     await interaction.followup.send(embed=error_embed)
                     return
             
-            query_embedding = await generate_query_embedding(query)
-            if not query_embedding:
-                error_embed = embed_builder.create_error_embed(
-                    "Failed to process your query. Please try again.",
-                    interaction.user
+            # Try Graph RAG first for better message retrieval
+            messages = []
+            if Config.GRAPH_RAG_ENABLED:
+                try:
+                    from retrieval.query_engine import run_query_pipeline
+                    
+                    pipeline_result = await run_query_pipeline(
+                        query=query,
+                        server_id=guild.id,
+                        author_id=mentioned_user.id if mentioned_user else None,
+                        channel_id=in_channel.id if in_channel else None,
+                        time_range=time_range,
+                        author_username=mentioned_user.name if mentioned_user else None,
+                    )
+                    messages = pipeline_result.get("context", [])
+                    logger.info(f"Export using Graph RAG: {len(messages)} context items")
+                except Exception as e:
+                    logger.warning(f"Graph RAG export failed, falling back to vector search: {e}")
+                    messages = []
+            
+            # Fallback to vector search
+            if not messages:
+                query_embedding = await generate_query_embedding(query)
+                if not query_embedding:
+                    error_embed = embed_builder.create_error_embed(
+                        "Failed to process your query. Please try again.",
+                        interaction.user
+                    )
+                    await interaction.followup.send(embed=error_embed)
+                    return
+                
+                filters = {
+                    'author_id': mentioned_user.id if mentioned_user else None,
+                    'time_range': time_range,
+                    'channel_id': in_channel.id if in_channel else None,
+                    'thread_id': in_thread.id if in_thread else None,
+                    'limit': 100  # Export more messages
+                }
+                
+                messages = await search_with_context(
+                    query_embedding=query_embedding,
+                    server_id=guild.id,
+                    filters=filters
                 )
-                await interaction.followup.send(embed=error_embed)
-                return
-            
-            filters = {
-                'author_id': mentioned_user.id if mentioned_user else None,
-                'time_range': time_range,
-                'channel_id': in_channel.id if in_channel else None,
-                'thread_id': in_thread.id if in_thread else None,
-                'limit': 100  # Export more messages
-            }
-            
-            messages = await search_with_context(
-                query_embedding=query_embedding,
-                server_id=guild.id,
-                filters=filters
-            )
             
             if not messages or len(messages) == 0:
                 no_results_embed = embed_builder.create_no_results_embed(query, interaction.user)
