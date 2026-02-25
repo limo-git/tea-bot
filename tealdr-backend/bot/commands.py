@@ -167,96 +167,36 @@ class BotCommands:
             persona = await server_settings_client.get_bot_persona(guild.id)
             requester_name = interaction.user.display_name
 
-            # ── Graph RAG path ────────────────────────────────────────────────
-            if Config.GRAPH_RAG_ENABLED:
-                try:
-                    from retrieval.query_engine import run_query_pipeline
-                    from generation.answer_generator import generate_answer
+            # ── Graph RAG Only (No Fallback) ──────────────────────────────────
+            try:
+                from retrieval.query_engine import run_query_pipeline
+                from generation.answer_generator import generate_answer
 
-                    pipeline_result = await run_query_pipeline(
-                        query=query,
-                        server_id=guild.id,
-                        author_id=mentioned_user.id if mentioned_user else None,
-                        channel_id=in_channel.id if in_channel else None,
-                        time_range=time_range,
-                        author_username=mentioned_user.name if mentioned_user else None,
-                    )
-                    response = await generate_answer(
-                        query=query,
-                        pipeline_result=pipeline_result,
-                        user_name=requester_name,
-                        persona=persona,
-                    )
-                    messages = pipeline_result.get("context", [])
-                    logger.info(f"Graph RAG answered query for {interaction.user}: {len(messages)} context items")
-
-                except Exception as e:
-                    logger.error(f"Graph RAG pipeline failed, falling back to Gemini: {e}")
-                    Config.GRAPH_RAG_ENABLED = False  # Temporarily disable for this request
-                    response = None
-            else:
-                response = None
-
-            # ── Gemini fallback path ──────────────────────────────────────────
-            if response is None:
-                query_embedding = await generate_query_embedding(query)
-                if not query_embedding:
-                    error_embed = embed_builder.create_error_embed(
-                        "Failed to process your query. Please try again.",
-                        interaction.user
-                    )
-                    await interaction.followup.send(embed=error_embed)
-                    return
-
-                filters = {
-                    'author_id': mentioned_user.id if mentioned_user else None,
-                    'time_range': time_range,
-                    'channel_id': in_channel.id if in_channel else None,
-                    'thread_id': in_thread.id if in_thread else None,
-                    'min_length': min_length,
-                    'limit': 20
-                }
-
-                messages = await search_with_context(
-                    query_embedding=query_embedding,
+                pipeline_result = await run_query_pipeline(
+                    query=query,
                     server_id=guild.id,
-                    filters=filters
+                    author_id=mentioned_user.id if mentioned_user else None,
+                    channel_id=in_channel.id if in_channel else None,
+                    time_range=time_range,
+                    author_username=mentioned_user.name if mentioned_user else None,
                 )
+                response = await generate_answer(
+                    query=query,
+                    pipeline_result=pipeline_result,
+                    user_name=requester_name,
+                    persona=persona,
+                )
+                messages = pipeline_result.get("context", [])
+                logger.info(f"Graph RAG answered query for {interaction.user}: {len(messages)} context items")
 
-                if not messages or len(messages) == 0:
-                    logger.info(f"No indexed messages found for query: {query}")
-                    messages = []
-
-                logger.info(f"Found {len(messages)} relevant messages")
-
-                user_name = mentioned_user.display_name if mentioned_user else "users"
-
-                if len(messages) == 0:
-                    base_prompt = (
-                        f"{persona}\n\n"
-                        f"The user {requester_name} asked: \"{query}\"\n\n"
-                        f"There are currently no indexed messages in this server that match the query. "
-                        f"This could be because the server was recently added or messages haven't been indexed yet. "
-                        f"Still try your best to answer the user's question based on your general knowledge. "
-                        f"Be helpful, friendly, and let them know that as more messages are indexed, "
-                        f"your answers will become more specific to this server's conversations.\n\n"
-                        f"Answer for {requester_name}:"
-                    )
-                else:
-                    base_prompt = get_prompt_for_query(
-                        query=query,
-                        messages=messages,
-                        user_name=user_name,
-                        requester_name=requester_name,
-                        persona=persona
-                    )
-
-                if context_str:
-                    prompt = f"{context_str}\n\n{base_prompt}\n\nNote: Consider the previous conversation when answering."
-                else:
-                    prompt = base_prompt
-
-                response = await gemini_client.generate_response(prompt)
+            except Exception as e:
+                logger.error(f"Graph RAG pipeline failed: {e}", exc_info=True)
+                error_embed = embed_builder.create_error_embed(
+                    f"Graph RAG pipeline encountered an error. Please check the logs or contact the administrator.\n\nError: {str(e)[:100]}",
+                    interaction.user
+                )
+                await interaction.followup.send(embed=error_embed)
+                return
             
             # Save to conversation context
             conversation_context.add_query(

@@ -27,7 +27,7 @@ class Config:
     CHUNK_WINDOW_MINUTES = int(os.getenv('CHUNK_WINDOW_MINUTES', '15'))
     RELATIONSHIP_DECAY_DAYS = int(os.getenv('RELATIONSHIP_DECAY_DAYS', '30'))
     VECTOR_TOP_K = int(os.getenv('VECTOR_TOP_K', '10'))
-    GRAPH_RAG_ENABLED = os.getenv('GRAPH_RAG_ENABLED', 'false').lower() == 'true'
+    GRAPH_RAG_ENABLED = os.getenv('GRAPH_RAG_ENABLED', 'true').lower() == 'true'
     
     @classmethod
     def validate(cls):
