@@ -96,7 +96,7 @@ async def generate_answer(
             lambda: client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=4096),
+                config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=8192),
             )
         )
         answer = response.text.strip()

@@ -12,7 +12,7 @@ class GeminiClient:
         self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
         self.generation_config = types.GenerateContentConfig(
             temperature=0.3,
-            max_output_tokens=1000,
+            max_output_tokens=8192,
         )
         logger.info("Gemini client initialized")
     
