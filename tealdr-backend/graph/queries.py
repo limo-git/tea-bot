@@ -58,27 +58,52 @@ LIMIT 10
 
 # ── summarization ─────────────────────────────────────────────────────────────
 SUMMARIZATION_QUERY = """
-// Find messages by author
-MATCH (author:Author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
-WHERE toLower(author.username) CONTAINS toLower($entity_name)
-RETURN m.content AS content,
-       m.timestamp AS timestamp,
-       c.name AS channel,
-       author.username AS author
-ORDER BY m.timestamp DESC
-LIMIT 50
-
-UNION
-
-// Also search by entity mentions
-MATCH (e:Entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
-WHERE toLower(e.name) CONTAINS toLower($entity_name)
-OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
-RETURN m2.content AS content,
-       m2.timestamp AS timestamp,
-       c2.name AS channel,
-       COALESCE(a2.username, 'Unknown') AS author
-ORDER BY m2.timestamp DESC
+// If entity is "server" or generic, return recent messages from all channels
+WITH $entity_name AS entity
+CALL {
+  WITH entity
+  WHERE toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+  MATCH (m:Message)-[:IN_CHANNEL]->(c:Channel)
+  OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
+  WHERE m.timestamp IS NOT NULL
+  RETURN m.content AS content,
+         m.timestamp AS timestamp,
+         c.name AS channel,
+         COALESCE(a.username, 'Unknown') AS author
+  ORDER BY m.timestamp DESC
+  LIMIT 50
+  
+  UNION
+  
+  WITH entity
+  WHERE NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+  // Find messages by specific author
+  MATCH (author:Author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
+  WHERE toLower(author.username) CONTAINS toLower(entity)
+  RETURN m.content AS content,
+         m.timestamp AS timestamp,
+         c.name AS channel,
+         author.username AS author
+  ORDER BY m.timestamp DESC
+  LIMIT 25
+  
+  UNION
+  
+  WITH entity
+  WHERE NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+  // Also search by entity mentions
+  MATCH (e:Entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
+  WHERE toLower(e.name) CONTAINS toLower(entity)
+  OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
+  RETURN m2.content AS content,
+         m2.timestamp AS timestamp,
+         c2.name AS channel,
+         COALESCE(a2.username, 'Unknown') AS author
+  ORDER BY m2.timestamp DESC
+  LIMIT 25
+}
+RETURN content, timestamp, channel, author
+ORDER BY timestamp DESC
 LIMIT 50
 """
 
@@ -130,6 +155,94 @@ RETURN ch.id        AS chunk_id,
 ORDER BY ch.start_time ASC
 """
 
+# ── temporal context: find related discussions across time ───────────────────
+TEMPORAL_CONTEXT_QUERY = """
+// Find messages about the same entities/topics across different time periods
+MATCH (e:Entity)<-[:MENTIONS]-(m1:Message)-[:IN_CHANNEL]->(c1:Channel)
+WHERE toLower(e.name) CONTAINS toLower($entity_name)
+  AND m1.timestamp IS NOT NULL
+
+// Find related messages through entity connections
+OPTIONAL MATCH (e)-[:RELATES_TO|CONTINUES*1..2]-(related_entity:Entity)
+OPTIONAL MATCH (related_entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
+WHERE m2.timestamp IS NOT NULL
+  AND m2.id <> m1.id
+
+// Get authors for context
+OPTIONAL MATCH (m1)<-[:SENT]-(a1:Author)
+OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
+
+WITH m1, m2, c1, c2, a1, a2, e, related_entity
+WHERE m1 IS NOT NULL
+
+RETURN DISTINCT
+  m1.content AS content,
+  m1.timestamp AS timestamp,
+  c1.name AS channel,
+  COALESCE(a1.username, 'Unknown') AS author,
+  'primary' AS context_type,
+  e.name AS related_entity,
+  
+  // Include related messages as additional context
+  COLLECT(DISTINCT {
+    content: m2.content,
+    timestamp: m2.timestamp,
+    channel: c2.name,
+    author: COALESCE(a2.username, 'Unknown'),
+    context_type: 'related',
+    related_entity: related_entity.name,
+    time_gap: duration.between(datetime(m2.timestamp), datetime(m1.timestamp)).days
+  }) AS related_discussions
+
+ORDER BY timestamp DESC
+LIMIT 30
+"""
+
+# ── conversation threads: find message sequences and continuations ───────────
+CONVERSATION_THREADS_QUERY = """
+// Find conversation threads around a topic
+MATCH (e:Entity)<-[:MENTIONS]-(m:Message)-[:IN_CHANNEL]->(c:Channel)
+WHERE toLower(e.name) CONTAINS toLower($entity_name)
+  AND m.timestamp IS NOT NULL
+
+// Find messages in temporal proximity (within 24 hours)
+MATCH (nearby:Message)-[:IN_CHANNEL]->(c)
+WHERE nearby.timestamp IS NOT NULL
+  AND abs(duration.between(datetime(m.timestamp), datetime(nearby.timestamp)).hours) <= 24
+  AND nearby.id <> m.id
+
+// Get authors
+OPTIONAL MATCH (m)<-[:SENT]-(author:Author)
+OPTIONAL MATCH (nearby)<-[:SENT]-(nearby_author:Author)
+
+// Find entities mentioned in nearby messages
+OPTIONAL MATCH (nearby)-[:MENTIONS]->(nearby_entity:Entity)
+
+WITH m, nearby, c, author, nearby_author, e, 
+     COLLECT(DISTINCT nearby_entity.name) AS nearby_entities,
+     abs(duration.between(datetime(m.timestamp), datetime(nearby.timestamp)).hours) AS time_gap
+
+// Group by conversation threads
+RETURN 
+  m.content AS content,
+  m.timestamp AS timestamp,
+  c.name AS channel,
+  COALESCE(author.username, 'Unknown') AS author,
+  e.name AS primary_entity,
+  
+  // Collect thread context
+  COLLECT(DISTINCT {
+    content: nearby.content,
+    timestamp: nearby.timestamp,
+    author: COALESCE(nearby_author.username, 'Unknown'),
+    time_gap_hours: time_gap,
+    mentioned_entities: nearby_entities
+  }) AS thread_context
+
+ORDER BY timestamp DESC
+LIMIT 20
+"""
+
 
 async def run_intent_query(session, intent: str, params: dict) -> list[dict]:
     """
@@ -142,6 +255,8 @@ async def run_intent_query(session, intent: str, params: dict) -> list[dict]:
         "evolutionary":  EVOLUTIONARY_QUERY,
         "expert_finding": EXPERT_FINDING_QUERY,
         "summarization": SUMMARIZATION_QUERY,
+        "temporal_context": TEMPORAL_CONTEXT_QUERY,
+        "conversation_threads": CONVERSATION_THREADS_QUERY,
     }
 
     cypher = query_map.get(intent)

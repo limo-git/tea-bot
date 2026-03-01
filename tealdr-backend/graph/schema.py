@@ -18,6 +18,8 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS FOR (ch:Chunk) ON (ch.start_time)",
     "CREATE INDEX IF NOT EXISTS FOR (ch:Chunk) ON (ch.channel_id)",
     "CREATE INDEX IF NOT EXISTS FOR (a:Author) ON (a.username)",
+    "CREATE INDEX IF NOT EXISTS FOR ()-[r:CONTINUES]->() ON (r.time_gap)",
+    "CREATE INDEX IF NOT EXISTS FOR ()-[r:RELATES_TO]->() ON (r.strength)",
 ]
 
 

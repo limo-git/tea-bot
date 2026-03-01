@@ -7,6 +7,7 @@ def assemble_context(graph_results: list[dict], vector_results: list[dict], inte
     """
     Merge graph traversal results and vector search results.
     Deduplicate by message content, rank by relevance.
+    Handles temporal context and cross-time discussion connections.
     Returns a unified list of context items ready for the answer generator.
     """
     seen_contents = set()
@@ -15,7 +16,7 @@ def assemble_context(graph_results: list[dict], vector_results: list[dict], inte
     # Graph results get priority — they are structurally relevant
     for item in graph_results:
         messages = item.get("messages", [])
-        if isinstance(messages, list):
+        if isinstance(messages, list) and len(messages) > 0:
             for msg in messages:
                 content = (msg.get("content") or "").strip()
                 if content and content not in seen_contents:
@@ -29,19 +30,83 @@ def assemble_context(graph_results: list[dict], vector_results: list[dict], inte
                         "relevance": 1.0,
                     })
         else:
-            # Flat record (relational, evolutionary, expert_finding, summarization)
+            # Flat record (relational, evolutionary, expert_finding, summarization, temporal_context, conversation_threads)
             content = (item.get("content") or item.get("text") or "").strip()
             if content and content not in seen_contents:
                 seen_contents.add(content)
-                unified.append({
+                
+                # Build base context item
+                context_item = {
                     "source": "graph",
                     "content": content,
                     "author": item.get("author", item.get("expert", "Unknown")),
                     "channel": item.get("channel", ""),
                     "timestamp": item.get("timestamp", item.get("last_seen", "")),
                     "relevance": 1.0,
-                    "extra": {k: v for k, v in item.items() if k not in ("content", "author", "channel", "timestamp")},
-                })
+                }
+                
+                # Add temporal context metadata if present
+                if "related_discussions" in item:
+                    context_item["temporal_context"] = {
+                        "has_related_discussions": True,
+                        "related_count": len(item["related_discussions"]),
+                        "primary_entity": item.get("related_entity", ""),
+                        "context_type": item.get("context_type", "primary")
+                    }
+                    
+                    # Add related discussions as separate context items
+                    for related in item["related_discussions"]:
+                        related_content = (related.get("content") or "").strip()
+                        if related_content and related_content not in seen_contents:
+                            seen_contents.add(related_content)
+                            unified.append({
+                                "source": "graph",
+                                "content": related_content,
+                                "author": related.get("author", "Unknown"),
+                                "channel": related.get("channel", ""),
+                                "timestamp": related.get("timestamp", ""),
+                                "relevance": 0.8,  # Slightly lower relevance for related discussions
+                                "temporal_context": {
+                                    "context_type": "related_discussion",
+                                    "time_gap_days": related.get("time_gap", 0),
+                                    "related_to_entity": item.get("related_entity", "")
+                                }
+                            })
+                
+                # Add conversation thread context if present
+                if "thread_context" in item:
+                    context_item["conversation_thread"] = {
+                        "has_thread_context": True,
+                        "thread_messages": len(item["thread_context"]),
+                        "primary_entity": item.get("primary_entity", "")
+                    }
+                    
+                    # Add thread messages as context
+                    for thread_msg in item["thread_context"]:
+                        thread_content = (thread_msg.get("content") or "").strip()
+                        if thread_content and thread_content not in seen_contents:
+                            seen_contents.add(thread_content)
+                            unified.append({
+                                "source": "graph",
+                                "content": thread_content,
+                                "author": thread_msg.get("author", "Unknown"),
+                                "channel": item.get("channel", ""),
+                                "timestamp": thread_msg.get("timestamp", ""),
+                                "relevance": 0.9,  # High relevance for thread context
+                                "conversation_thread": {
+                                    "context_type": "thread_message",
+                                    "time_gap_hours": thread_msg.get("time_gap_hours", 0),
+                                    "mentioned_entities": thread_msg.get("mentioned_entities", [])
+                                }
+                            })
+                
+                # Add extra metadata for other fields
+                extra_fields = {k: v for k, v in item.items() 
+                              if k not in ("content", "author", "channel", "timestamp", "related_discussions", "thread_context")}
+                if extra_fields:
+                    context_item["extra"] = extra_fields
+                
+                unified.append(context_item)
 
     # Vector results fill in semantic gaps
     for msg in vector_results:

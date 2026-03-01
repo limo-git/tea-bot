@@ -20,6 +20,8 @@ You are an intelligent assistant for a Discord server. You answer questions usin
 ## Retrieved Context
 The following messages and graph data were retrieved as most relevant to this question. Items marked `[graph]` come from the knowledge graph (structurally relevant). Items marked `[search]` come from semantic vector search.
 
+{temporal_context_info}
+
 ```
 {context}
 ```
@@ -31,9 +33,12 @@ The following messages and graph data were retrieved as most relevant to this qu
 4. **For relational intent** — explain the connection/path between the two entities clearly.
 5. **For evolutionary intent** — describe how the topic changed over time chronologically.
 6. **For summarization** — give a comprehensive organized overview with headers.
-7. **Format for Discord** — use bullet points, bold for names/links, keep it scannable.
-8. **If context is insufficient** — say so briefly and suggest what the user could search for instead.
-9. **Never fabricate** — do not add information not present in the context.
+7. **For temporal context queries** — connect related discussions across different time periods, showing how topics evolved or continued over time.
+8. **For conversation threads** — show the flow of discussion and how different participants contributed to the conversation.
+9. **Format for Discord** — use bullet points, bold for names/links, keep it scannable.
+10. **If context is insufficient** — say so briefly and suggest what the user could search for instead.
+11. **Never fabricate** — do not add information not present in the context.
+12. **Connect the dots** — When you have temporal context or related discussions, explicitly connect them to show the full story across time.
 
 Answer the question now:"""
 
@@ -76,7 +81,13 @@ async def generate_answer(
             f"in the server history. Try asking with different keywords, or the topic may not have been discussed yet."
         )
 
+    # Import temporal context helpers
+    from generation.temporal_context_helper import _generate_temporal_context_info, format_context_for_prompt
+    
     context_str = format_context_for_prompt(context_items)
+    
+    # Generate temporal context information
+    temporal_info = _generate_temporal_context_info(pipeline_result, context_items)
 
     prompt = ANSWER_PROMPT.format(
         persona=persona,
@@ -85,6 +96,7 @@ async def generate_answer(
         intent=understanding.get("intent", "summarization"),
         primary_entity=understanding.get("primary_entity", ""),
         context=context_str,
+        temporal_context_info=temporal_info,
     )
 
     client = _get_client()
