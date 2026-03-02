@@ -59,13 +59,14 @@ LIMIT 10
 # ── summarization ─────────────────────────────────────────────────────────────
 SUMMARIZATION_QUERY = """
 // If entity is "server" or generic, return recent messages from all channels
-WITH $entity_name AS entity
+WITH $entity_name AS entity, $time_filter AS time_filter
 CALL {
-  WITH entity
+  WITH entity, time_filter
   WHERE toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
   MATCH (m:Message)-[:IN_CHANNEL]->(c:Channel)
   OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
   WHERE m.timestamp IS NOT NULL
+    AND (time_filter IS NULL OR m.timestamp >= time_filter)
   RETURN m.content AS content,
          m.timestamp AS timestamp,
          c.name AS channel,
@@ -75,11 +76,12 @@ CALL {
   
   UNION
   
-  WITH entity
+  WITH entity, time_filter
   WHERE NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
   // Find messages by specific author
   MATCH (author:Author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
   WHERE toLower(author.username) CONTAINS toLower(entity)
+    AND (time_filter IS NULL OR m.timestamp >= time_filter)
   RETURN m.content AS content,
          m.timestamp AS timestamp,
          c.name AS channel,
@@ -89,11 +91,12 @@ CALL {
   
   UNION
   
-  WITH entity
+  WITH entity, time_filter
   WHERE NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
   // Also search by entity mentions
   MATCH (e:Entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
   WHERE toLower(e.name) CONTAINS toLower(entity)
+    AND (time_filter IS NULL OR m2.timestamp >= time_filter)
   OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
   RETURN m2.content AS content,
          m2.timestamp AS timestamp,

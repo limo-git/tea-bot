@@ -123,7 +123,7 @@ async def understand_query(query: str) -> dict:
         }
 
 
-async def graph_traversal(intent: str, understanding: dict) -> list[dict]:
+async def graph_traversal(intent: str, understanding: dict, time_range: tuple = None) -> list[dict]:
     """Step 2: Run the appropriate Cypher query based on intent."""
     driver = await get_driver()
     primary = understanding.get("primary_entity", "")
@@ -138,6 +138,19 @@ async def graph_traversal(intent: str, understanding: dict) -> list[dict]:
         params = {"entity_a": primary, "entity_b": secondary}
     else:
         params = {"entity_name": primary}
+    
+    # Add time filter for recent data (default to last 7 days for general queries)
+    if time_range:
+        # Use provided time range
+        start_time, end_time = time_range
+        if start_time:
+            params["time_filter"] = start_time.isoformat()
+    else:
+        # Default to last 7 days for recency
+        from datetime import datetime, timedelta
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        params["time_filter"] = seven_days_ago.isoformat()
+        logger.info(f"No time range specified, filtering to last 7 days for recency")
 
     try:
         async with driver.session() as session:
@@ -155,6 +168,16 @@ async def graph_traversal(intent: str, understanding: dict) -> list[dict]:
                         params = {"entity_a": best, "entity_b": secondary}
                     else:
                         params = {"entity_name": best}
+                    # Keep the time filter for fuzzy search
+                    if "time_filter" not in params:
+                        if time_range:
+                            start_time, end_time = time_range
+                            if start_time:
+                                params["time_filter"] = start_time.isoformat()
+                        else:
+                            from datetime import datetime, timedelta
+                            seven_days_ago = datetime.utcnow() - timedelta(days=7)
+                            params["time_filter"] = seven_days_ago.isoformat()
                     results = await run_intent_query(session, intent, params)
 
         logger.info(f"Graph traversal ({intent}): {len(results)} records")
@@ -208,7 +231,7 @@ async def run_query_pipeline(
         )
 
     # Step 2 — Standard Graph traversal (for non-temporal queries)
-    graph_results = await graph_traversal(intent, understanding)
+    graph_results = await graph_traversal(intent, understanding, time_range)
 
     # Step 3 — Vector search (always runs in parallel for semantic coverage)
     search_query = " ".join(understanding.get("search_terms", [query]))

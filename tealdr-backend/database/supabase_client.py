@@ -78,7 +78,8 @@ class SupabaseClient:
     
     async def semantic_search_filtered(self, embedding, server_id, author_id=None, time_range=None, channel_id=None, thread_id=None, limit=20):
         try:
-            query = self.client.table('messages').select('*').eq('server_id', server_id)
+            # Select messages with channel name if available
+            query = self.client.table('messages').select('*, channels(name)').eq('server_id', server_id)
             
             if author_id:
                 query = query.eq('author_id', author_id)

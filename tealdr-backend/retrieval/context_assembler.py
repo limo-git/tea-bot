@@ -113,11 +113,21 @@ def assemble_context(graph_results: list[dict], vector_results: list[dict], inte
         content = (msg.get("content") or "").strip()
         if content and content not in seen_contents:
             seen_contents.add(content)
+            
+            # Try to get channel name from joined data or fallback to channel ID
+            channel_info = ""
+            if msg.get("channels") and isinstance(msg["channels"], dict):
+                channel_info = msg["channels"].get("name", "")
+            if not channel_info:
+                channel_info = msg.get("channel_name") or msg.get("channel_id", "")
+            if isinstance(channel_info, (int, float)):
+                channel_info = f"#{channel_info}"
+            
             unified.append({
                 "source": "vector",
                 "content": content,
                 "author": msg.get("author_name", "Unknown"),
-                "channel": str(msg.get("channel_id", "")),
+                "channel": str(channel_info),
                 "timestamp": str(msg.get("created_at", "")),
                 "relevance": float(msg.get("similarity", 0.5)),
             })
