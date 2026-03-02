@@ -59,14 +59,13 @@ LIMIT 10
 # ── summarization ─────────────────────────────────────────────────────────────
 SUMMARIZATION_QUERY = """
 // If entity is "server" or generic, return recent messages from all channels
-WITH $entity_name AS entity, $time_filter AS time_filter
 CALL {
-  WITH entity, time_filter
-  WHERE toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+  WITH $entity_name AS entity, $time_filter AS time_filter
   MATCH (m:Message)-[:IN_CHANNEL]->(c:Channel)
   OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
   WHERE m.timestamp IS NOT NULL
-    AND (time_filter IS NULL OR m.timestamp >= time_filter)
+    AND toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+    AND (time_filter IS NULL OR datetime(m.timestamp) >= datetime(time_filter))
   RETURN m.content AS content,
          m.timestamp AS timestamp,
          c.name AS channel,
@@ -76,12 +75,11 @@ CALL {
   
   UNION
   
-  WITH entity, time_filter
-  WHERE NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
-  // Find messages by specific author
+  WITH $entity_name AS entity, $time_filter AS time_filter
   MATCH (author:Author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
   WHERE toLower(author.username) CONTAINS toLower(entity)
-    AND (time_filter IS NULL OR m.timestamp >= time_filter)
+    AND NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+    AND (time_filter IS NULL OR datetime(m.timestamp) >= datetime(time_filter))
   RETURN m.content AS content,
          m.timestamp AS timestamp,
          c.name AS channel,
@@ -91,13 +89,12 @@ CALL {
   
   UNION
   
-  WITH entity, time_filter
-  WHERE NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
-  // Also search by entity mentions
+  WITH $entity_name AS entity, $time_filter AS time_filter
   MATCH (e:Entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
-  WHERE toLower(e.name) CONTAINS toLower(entity)
-    AND (time_filter IS NULL OR m2.timestamp >= time_filter)
   OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
+  WHERE toLower(e.name) CONTAINS toLower(entity)
+    AND NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
+    AND (time_filter IS NULL OR datetime(m2.timestamp) >= datetime(time_filter))
   RETURN m2.content AS content,
          m2.timestamp AS timestamp,
          c2.name AS channel,
@@ -211,7 +208,6 @@ WHERE toLower(e.name) CONTAINS toLower($entity_name)
 // Find messages in temporal proximity (within 24 hours)
 MATCH (nearby:Message)-[:IN_CHANNEL]->(c)
 WHERE nearby.timestamp IS NOT NULL
-  AND abs(duration.between(datetime(m.timestamp), datetime(nearby.timestamp)).hours) <= 24
   AND nearby.id <> m.id
 
 // Get authors
@@ -221,9 +217,16 @@ OPTIONAL MATCH (nearby)<-[:SENT]-(nearby_author:Author)
 // Find entities mentioned in nearby messages
 OPTIONAL MATCH (nearby)-[:MENTIONS]->(nearby_entity:Entity)
 
+// Calculate time gap in hours (simplified to avoid datetime parsing issues)
 WITH m, nearby, c, author, nearby_author, e, 
      COLLECT(DISTINCT nearby_entity.name) AS nearby_entities,
-     abs(duration.between(datetime(m.timestamp), datetime(nearby.timestamp)).hours) AS time_gap
+     CASE 
+       WHEN m.timestamp IS NOT NULL AND nearby.timestamp IS NOT NULL 
+       THEN abs(m.timestamp - nearby.timestamp) / 3600000  // Convert milliseconds to hours
+       ELSE 0 
+     END AS time_gap
+
+WHERE time_gap <= 24  // Filter to 24 hours
 
 // Group by conversation threads
 RETURN 

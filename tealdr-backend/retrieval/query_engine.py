@@ -158,18 +158,18 @@ async def graph_traversal(intent: str, understanding: dict, time_range: tuple = 
     else:
         params = {"entity_name": primary}
     
-    # Add time filter for recent data (default to last 7 days for general queries)
+    # Add time filter for recent data (default to last 3 days for general queries)
     if time_range:
         # Use provided time range
         start_time, end_time = time_range
         if start_time:
             params["time_filter"] = start_time.isoformat()
     else:
-        # Default to last 7 days for recency
+        # Default to last 3 days for recency (matching /ask command behavior)
         from datetime import datetime, timedelta
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        params["time_filter"] = seven_days_ago.isoformat()
-        logger.info(f"No time range specified, filtering to last 7 days for recency")
+        three_days_ago = datetime.utcnow() - timedelta(days=3)
+        params["time_filter"] = three_days_ago.isoformat()
+        logger.info(f"No time range specified, filtering to last 3 days for recency")
 
     try:
         async with driver.session() as session:
