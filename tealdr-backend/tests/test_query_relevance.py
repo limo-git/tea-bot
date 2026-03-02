@@ -146,7 +146,7 @@ class TestVectorSearchRelevance:
     """Test that vector search returns semantically relevant results."""
     
     async def test_vector_search_uses_semantic_search_for_lookup(self):
-        """Test that vector search uses semantic search for lookup queries."""
+        """Test that vector search uses semantic search for lookup queries without time filter."""
         from retrieval.vector_search import vector_search
         
         with patch('retrieval.vector_search.generate_query_embedding') as mock_embed, \
@@ -165,9 +165,14 @@ class TestVectorSearchRelevance:
             
             assert mock_embed.called, "Should generate embedding for lookup queries"
             assert mock_search.called, "Should use semantic search for lookup queries"
+            
+            # Verify that time_range is None (search entire database)
+            call_args = mock_search.call_args
+            assert call_args[1]['time_range'] is None, "Lookup queries should search entire database (no time filter)"
+            
             assert len(results) > 0, "Should return results"
             
-            print("✅ Vector search uses semantic search for lookup queries")
+            print("✅ Vector search uses semantic search for lookup queries (entire database)")
     
     async def test_vector_search_uses_timerange_for_summarization(self):
         """Test that vector search uses get_messages_by_timerange for summarization."""

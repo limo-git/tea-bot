@@ -16,17 +16,17 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
     For summarization queries (e.g., "what did I miss"), prioritizes recency over semantic similarity.
     """
     try:
-        # If no explicit time range, default to last 3 days for "recently" queries (matching /recap)
-        if time_range is None:
-            from datetime import datetime, timedelta
-            end_time = datetime.utcnow()
-            start_time = end_time - timedelta(days=3)
-            time_range = (start_time, end_time)
-            logger.info(f"No time range specified, defaulting to last 3 days for recency")
-
         # For summarization queries (general server activity), get all recent messages
         if intent == "summarization":
-            logger.info(f"Summarization query detected - fetching all recent messages by timestamp")
+            # Default to last 3 days for summarization if no time range specified
+            if time_range is None:
+                from datetime import datetime, timedelta
+                end_time = datetime.utcnow()
+                start_time = end_time - timedelta(days=3)
+                time_range = (start_time, end_time)
+                logger.info(f"Summarization query - defaulting to last 3 days for recency")
+            
+            logger.info(f"Fetching all recent messages by timestamp (last 3 days)")
             results = await supabase_client.get_messages_by_timerange(
                 server_id=server_id,
                 channel_id=channel_id,
@@ -41,18 +41,23 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             return results
         
         # For all other query types (lookup, expert_finding, etc.), use semantic search
-        # This ensures we find messages that are semantically relevant to the query
+        # For lookup queries, search the ENTIRE database semantically (no time filter by default)
+        # This allows finding relevant messages from any time period
+        logger.info(f"Lookup/specific query - using semantic search across entire database")
+        
         embedding = await generate_query_embedding(query)
         if not embedding:
             logger.warning("Failed to generate query embedding for vector search")
             return []
 
+        # Only apply time_range if explicitly provided by user
+        # For lookup queries without explicit time range, search all messages
         results = await supabase_client.semantic_search_filtered(
             embedding=embedding,
             server_id=server_id,
             author_id=author_id,
             channel_id=channel_id,
-            time_range=time_range,
+            time_range=time_range if time_range else None,  # Don't default to 3 days for lookup
             limit=Config.VECTOR_TOP_K,
         )
 

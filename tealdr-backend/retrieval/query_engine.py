@@ -163,18 +163,25 @@ async def graph_traversal(intent: str, understanding: dict, time_range: tuple = 
     else:
         params = {"entity_name": primary}
     
-    # Add time filter for recent data (default to last 3 days for general queries)
+    # Add time filter for recent data
+    # For summarization queries, default to last 3 days
+    # For lookup queries, search entire database (no default time filter)
     if time_range:
         # Use provided time range
         start_time, end_time = time_range
         if start_time:
             params["time_filter"] = start_time.isoformat()
-    else:
-        # Default to last 3 days for recency (matching /ask command behavior)
+    elif intent == "summarization":
+        # Only default to 3 days for summarization queries
         from datetime import datetime, timedelta
         three_days_ago = datetime.utcnow() - timedelta(days=3)
         params["time_filter"] = three_days_ago.isoformat()
-        logger.info(f"No time range specified, filtering to last 3 days for recency")
+        logger.info(f"Summarization query - filtering to last 3 days for recency")
+    else:
+        # For lookup/expert_finding/etc, don't apply time filter by default
+        # This allows searching the entire database semantically
+        params["time_filter"] = None
+        logger.info(f"Lookup query - searching entire database (no time filter)")
 
     try:
         async with driver.session() as session:
