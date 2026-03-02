@@ -97,7 +97,8 @@ class SupabaseClient:
                 if end_time:
                     query = query.lte('created_at', end_time.isoformat())
             
-            messages = query.limit(200).execute().data
+            # Order by created_at DESC to get most recent messages first
+            messages = query.order('created_at', desc=True).limit(200).execute().data
             
             if not messages:
                 return []

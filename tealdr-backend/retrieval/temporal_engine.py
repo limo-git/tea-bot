@@ -64,6 +64,7 @@ async def run_temporal_query_pipeline(
             author_id=author_id,
             channel_id=channel_id,
             time_range=time_range,
+            intent=intent,  # Pass intent to prioritize recency for summarization queries
         )
     
     # Step 6: Assemble comprehensive context
