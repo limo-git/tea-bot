@@ -135,6 +135,13 @@ class BotCommands:
             time_keyword = extract_time_keywords(query)
             time_range = parse_time_range(time_keyword) if time_keyword else None
             
+            # For general server activity queries, default to recent time range (3 days) like recap
+            if not time_range:
+                query_lower = query.lower()
+                if any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+                    time_range = parse_time_range("3d")  # Default to 3 days for general server queries
+                    logger.info(f"General server activity query detected, using 3-day time range")
+            
             # Parse date filters if provided
             if from_date or to_date:
                 try:

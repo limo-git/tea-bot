@@ -40,8 +40,7 @@ Intent guide:
 - "continue the discussion about X" → conversation_threads
 - Questions asking for context/background → temporal_context
 - Follow-up questions → conversation_threads
-- "what did i miss", "what happened", "server activity", "recent activity" → summarization with entity="server"
-
+- "what did i miss", "what happened", "server activity", "recent activity" → summarization 
 Temporal context indicators:
 - "context", "background", "what happened before", "continuation", "follow-up"
 - "over time", "previously", "earlier", "later", "then", "after that"
