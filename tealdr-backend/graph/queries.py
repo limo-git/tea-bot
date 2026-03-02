@@ -5,9 +5,15 @@ Never use string interpolation — all values go through parameters.
 
 # ── lookup ────────────────────────────────────────────────────────────────────
 LOOKUP_QUERY = """
-MATCH (e:Entity {name: $entity_name})
+// Fuzzy match entity name (case-insensitive, partial match)
+MATCH (e:Entity)
+WHERE toLower(e.name) CONTAINS toLower($entity_name)
+   OR toLower($entity_name) CONTAINS toLower(e.name)
 OPTIONAL MATCH (e)<-[:MENTIONS]-(m:Message)-[:IN_CHANNEL]->(c:Channel)
 OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
+WHERE m.timestamp IS NOT NULL
+WITH e, m, c, a
+ORDER BY m.timestamp DESC
 RETURN e.name        AS entity,
        e.type        AS entity_type,
        e.description AS description,
@@ -16,9 +22,9 @@ RETURN e.name        AS entity,
            timestamp: m.timestamp,
            channel:   c.name,
            author:    a.username
-       })[..10]       AS messages
+       })[..20]       AS messages
 ORDER BY e.mention_count DESC
-LIMIT 1
+LIMIT 5
 """
 
 # ── relational ────────────────────────────────────────────────────────────────

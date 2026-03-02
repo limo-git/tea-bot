@@ -24,7 +24,7 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             time_range = (start_time, end_time)
             logger.info(f"No time range specified, defaulting to last 3 days for recency")
 
-        # For summarization queries, get all recent messages without semantic filtering
+        # For summarization queries (general server activity), get all recent messages
         if intent == "summarization":
             logger.info(f"Summarization query detected - fetching all recent messages by timestamp")
             results = await supabase_client.get_messages_by_timerange(
@@ -40,7 +40,8 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             logger.info(f"Fetched {len(results)} recent messages for summarization")
             return results
         
-        # For other query types, use semantic search
+        # For all other query types (lookup, expert_finding, etc.), use semantic search
+        # This ensures we find messages that are semantically relevant to the query
         embedding = await generate_query_embedding(query)
         if not embedding:
             logger.warning("Failed to generate query embedding for vector search")
@@ -55,7 +56,12 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             limit=Config.VECTOR_TOP_K,
         )
 
-        logger.info(f"Vector search returned {len(results)} results for query: {query[:60]}")
+        logger.info(f"Vector search returned {len(results)} results for query '{query[:60]}': {len(results)} messages")
+        
+        # If no results from semantic search, log warning
+        if not results:
+            logger.warning(f"Semantic search returned no results for query: {query[:60]}")
+        
         return results
 
     except Exception as e:

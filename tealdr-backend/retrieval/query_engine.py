@@ -31,16 +31,21 @@ Return:
   "time_scope": "recent | days | weeks | months | all_time"
 }}
 
-Intent guide:
-- "what did X say about Y" → summarization
-- "who knows X" → expert_finding  
+Intent guide (choose the MOST SPECIFIC intent):
+- "who talked about X" / "who mentioned X" / "who was discussing X" → lookup (find messages about X)
+- "who knows X" / "who is expert in X" → expert_finding  
+- "what did X say about Y" → lookup (X is person, Y is topic)
 - "how are X and Y related" → relational
-- "tell me about X" → lookup
-- "what happened with X over time" → temporal_context
+- "tell me about X" / "what is X" / "explain X" → lookup
+- "what happened with X over time" / "how did X evolve" → temporal_context
 - "continue the discussion about X" → conversation_threads
-- Questions asking for context/background → temporal_context
-- Follow-up questions → conversation_threads
-- "what did i miss", "what happened", "server activity", "recent activity" → summarization 
+- "what did i miss" / "what happened" / "server activity" / "recent activity" (NO specific entity) → summarization 
+
+IMPORTANT: 
+- If query asks about a SPECIFIC topic/person/thing, use "lookup" NOT "summarization"
+- Only use "summarization" for general server activity with NO specific entity
+- Extract the actual entity name from the query (e.g., "geopolitics" from "who talked about geopolitics")
+
 Temporal context indicators:
 - "context", "background", "what happened before", "continuation", "follow-up"
 - "over time", "previously", "earlier", "later", "then", "after that"
@@ -253,7 +258,14 @@ async def run_query_pipeline(
     graph_results = await graph_traversal(intent, understanding, time_range)
 
     # Step 3 — Vector search (always runs in parallel for semantic coverage)
-    search_query = " ".join(understanding.get("search_terms", [query]))
+    # For lookup queries, use the entity name + search terms for better semantic matching
+    if intent == "lookup" and understanding.get("primary_entity"):
+        search_query = f"{understanding['primary_entity']} {' '.join(understanding.get('search_terms', []))}"
+    else:
+        search_query = " ".join(understanding.get("search_terms", [query]))
+    
+    logger.info(f"Vector search query: '{search_query[:100]}'")
+    
     vector_results = await vector_search(
         query=search_query,
         server_id=server_id,
