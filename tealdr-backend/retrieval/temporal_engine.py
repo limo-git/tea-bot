@@ -34,7 +34,7 @@ async def run_temporal_query_pipeline(
     logger.info(f"Temporal pipeline: intent={intent}, entity={primary_entity}, temporal={temporal_context_needed}")
     
     # Step 1: Get primary results based on intent
-    primary_results = await _get_primary_results(intent, understanding)
+    primary_results = await _get_primary_results(intent, understanding, time_range)
     
     # Step 2: If temporal context is needed, get related discussions across time
     temporal_results = []
@@ -81,7 +81,7 @@ async def run_temporal_query_pipeline(
     }
 
 
-async def _get_primary_results(intent: str, understanding: dict) -> List[dict]:
+async def _get_primary_results(intent: str, understanding: dict, time_range: tuple = None) -> List[dict]:
     """Get primary results based on the main intent."""
     driver = await get_driver()
     primary = understanding.get("primary_entity", "")
@@ -96,6 +96,19 @@ async def _get_primary_results(intent: str, understanding: dict) -> List[dict]:
         params = {"entity_a": primary, "entity_b": secondary}
     else:
         params = {"entity_name": primary}
+    
+    # Add time filter for recent data (default to last 3 days for general queries)
+    if time_range:
+        # Use provided time range
+        start_time, end_time = time_range
+        if start_time:
+            params["time_filter"] = start_time.isoformat()
+    else:
+        # Default to last 3 days for recency
+        from datetime import datetime, timedelta
+        three_days_ago = datetime.utcnow() - timedelta(days=3)
+        params["time_filter"] = three_days_ago.isoformat()
+        logger.info(f"No time range specified, filtering to last 3 days for recency")
     
     try:
         async with driver.session() as session:

@@ -191,7 +191,11 @@ RETURN DISTINCT
     author: COALESCE(a2.username, 'Unknown'),
     context_type: 'related',
     related_entity: related_entity.name,
-    time_gap: duration.between(datetime(m2.timestamp), datetime(m1.timestamp)).days
+    time_gap: CASE 
+      WHEN m1.timestamp IS NOT NULL AND m2.timestamp IS NOT NULL 
+      THEN abs(m1.timestamp - m2.timestamp) / 86400000  // Convert milliseconds to days
+      ELSE 0 
+    END
   }) AS related_discussions
 
 ORDER BY timestamp DESC

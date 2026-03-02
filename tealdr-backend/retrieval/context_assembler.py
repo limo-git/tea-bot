@@ -114,12 +114,8 @@ def assemble_context(graph_results: list[dict], vector_results: list[dict], inte
         if content and content not in seen_contents:
             seen_contents.add(content)
             
-            # Try to get channel name from joined data or fallback to channel ID
-            channel_info = ""
-            if msg.get("channels") and isinstance(msg["channels"], dict):
-                channel_info = msg["channels"].get("name", "")
-            if not channel_info:
-                channel_info = msg.get("channel_name") or msg.get("channel_id", "")
+            # Get channel info from channel_id since no join relationship exists
+            channel_info = msg.get("channel_id", "")
             if isinstance(channel_info, (int, float)):
                 channel_info = f"#{channel_info}"
             
