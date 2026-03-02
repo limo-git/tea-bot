@@ -40,6 +40,7 @@ Intent guide:
 - "continue the discussion about X" → conversation_threads
 - Questions asking for context/background → temporal_context
 - Follow-up questions → conversation_threads
+- "what did i miss", "what happened", "server activity", "recent activity" → summarization with entity="server"
 
 Temporal context indicators:
 - "context", "background", "what happened before", "continuation", "follow-up"
@@ -107,19 +108,38 @@ async def understand_query(query: str) -> dict:
         result.setdefault("search_terms", [query])
         result.setdefault("temporal_context_needed", False)
         result.setdefault("time_scope", "recent")
+        
+        # Fix for general server activity queries
+        if not result["primary_entity"] or result["primary_entity"] in ["", "**", "*"]:
+            # Check if this is a general server activity query
+            query_lower = query.lower()
+            if any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+                result["primary_entity"] = "server"
+                result["intent"] = "summarization"
+                logger.info(f"Detected general server activity query, setting entity to 'server'")
 
         logger.info(f"Query understood: intent={result['intent']}, entity={result['primary_entity']}")
         return result
 
     except (json.JSONDecodeError, Exception) as e:
         logger.error(f"Query understanding failed: {e}")
+        # Fallback for failed query understanding
+        fallback_entity = "server"  # Default to server for general queries
+        query_lower = query.lower()
+        if any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+            fallback_entity = "server"
+        else:
+            fallback_entity = query  # Use the query itself as entity
+            
         return {
             "intent": "summarization",
-            "primary_entity": query,
+            "primary_entity": fallback_entity,
             "primary_entity_type": None,
             "secondary_entity": None,
             "secondary_entity_type": None,
             "search_terms": [query],
+            "temporal_context_needed": False,
+            "time_scope": "recent",
         }
 
 
