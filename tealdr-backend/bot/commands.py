@@ -643,6 +643,144 @@ class BotCommands:
             logger.error(f"Error in customize command: {e}")
             await interaction.followup.send("An error occurred while customizing the bot.", ephemeral=True)
     
+    async def lookup_command(
+        self,
+        interaction: discord.Interaction,
+        clues: str,
+        author: discord.User = None,
+        in_channel: discord.TextChannel = None,
+        from_date: str = None,
+        to_date: str = None
+    ):
+        """Find exact messages based on clues - shows who said what, when, and where."""
+        await interaction.response.defer(thinking=True)
+        
+        try:
+            guild = interaction.guild
+            if not guild:
+                await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+                return
+            
+            # Parse date filters if provided
+            time_range = None
+            if from_date or to_date:
+                try:
+                    from datetime import datetime
+                    start_time = datetime.fromisoformat(from_date) if from_date else None
+                    end_time = datetime.fromisoformat(to_date) if to_date else None
+                    if start_time or end_time:
+                        time_range = (start_time, end_time)
+                except ValueError:
+                    await interaction.followup.send(
+                        "❌ Invalid date format. Please use YYYY-MM-DD format.",
+                        ephemeral=True
+                    )
+                    return
+            
+            logger.info(f"Lookup command from {interaction.user}: clues='{clues}', author={author}, channel={in_channel}")
+            
+            # Use vector search to find semantically relevant messages
+            from retrieval.vector_search import vector_search
+            
+            messages = await vector_search(
+                query=clues,
+                server_id=guild.id,
+                author_id=author.id if author else None,
+                channel_id=in_channel.id if in_channel else None,
+                time_range=time_range,
+                intent="lookup"
+            )
+            
+            if not messages or len(messages) == 0:
+                embed = discord.Embed(
+                    title="🔍 No Messages Found",
+                    description=f"I couldn't find any messages matching your clues: \"{clues}\"",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(
+                    name="💡 Try:",
+                    value="• Using different keywords\n"
+                          "• Expanding the time range\n"
+                          "• Checking if the channel is indexed\n"
+                          "• Being more specific with clues",
+                    inline=False
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            
+            # Format results as exact message list
+            embed = discord.Embed(
+                title="🔍 Lookup Results",
+                description=f"Found {len(messages)} message(s) matching: \"{clues}\"",
+                color=discord.Color.blue()
+            )
+            
+            # Add up to 10 messages
+            for i, msg in enumerate(messages[:10], 1):
+                author_name = msg.get("author_name") or msg.get("author", "Unknown")
+                content = msg.get("content", "")
+                timestamp = msg.get("created_at") or msg.get("timestamp", "")
+                
+                # Get channel name
+                channel_id = msg.get("channel_id")
+                channel_name = None
+                if channel_id:
+                    try:
+                        channel = guild.get_channel(int(channel_id))
+                        if channel:
+                            channel_name = f"#{channel.name}"
+                    except:
+                        pass
+                if not channel_name:
+                    channel_name = msg.get("channel", "")
+                    if channel_name and not channel_name.startswith("#"):
+                        channel_name = f"#{channel_name}"
+                
+                # Format timestamp
+                if timestamp:
+                    try:
+                        from datetime import datetime
+                        if isinstance(timestamp, str):
+                            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        else:
+                            dt = timestamp
+                        date_str = dt.strftime("%b %d, %Y at %I:%M %p")
+                    except:
+                        date_str = str(timestamp)[:19]
+                else:
+                    date_str = "Unknown date"
+                
+                # Truncate long messages
+                display_content = content
+                if len(content) > 200:
+                    display_content = content[:200] + "..."
+                
+                # Format field
+                field_name = f"{i}. {author_name}"
+                if channel_name:
+                    field_value = f"**When:** {date_str}\n**Where:** {channel_name}\n**Said:** \"{display_content}\""
+                else:
+                    field_value = f"**When:** {date_str}\n**Said:** \"{display_content}\""
+                
+                embed.add_field(
+                    name=field_name,
+                    value=field_value,
+                    inline=False
+                )
+            
+            if len(messages) > 10:
+                embed.set_footer(text=f"Showing 10 of {len(messages)} results")
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"Lookup returned {len(messages)} results for {interaction.user}")
+        
+        except Exception as e:
+            logger.error(f"Error in lookup command: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ An error occurred while searching for messages. Please try again.",
+                ephemeral=True
+            )
+    
     async def clear_command(self, interaction: discord.Interaction):
         """Clear conversation context for the user."""
         await interaction.response.defer(ephemeral=True)
@@ -1664,6 +1802,24 @@ def setup_commands(bot):
         except Exception as e:
             logger.error(f"Error in recap server autocomplete: {e}")
             return []
+
+    @bot.tree.command(name="lookup", description="Find exact messages based on clues - shows who said what, when, and where")
+    @app_commands.describe(
+        clues="Keywords or phrases to search for (e.g., 'deployment issues', 'API discussion')",
+        author="Optional: Filter by specific user",
+        in_channel="Optional: Search only in this channel",
+        from_date="Optional: Start date (YYYY-MM-DD)",
+        to_date="Optional: End date (YYYY-MM-DD)"
+    )
+    async def lookup(
+        interaction: discord.Interaction,
+        clues: str,
+        author: discord.User = None,
+        in_channel: discord.TextChannel = None,
+        from_date: str = None,
+        to_date: str = None
+    ):
+        await commands.lookup_command(interaction, clues, author, in_channel, from_date, to_date)
 
     @bot.tree.command(name="recap", description="Get a recap of messages from a specific timeframe")
     @app_commands.describe(
