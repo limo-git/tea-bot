@@ -679,17 +679,51 @@ class BotCommands:
             
             logger.info(f"Lookup command from {interaction.user}: clues='{clues}', author={author}, channel={in_channel}")
             
-            # Use vector search to find semantically relevant messages
-            from retrieval.vector_search import vector_search
+            # Use direct semantic search for better relevance
+            from ai.embeddings import generate_query_embedding
+            from database.supabase_client import supabase_client
             
-            messages = await vector_search(
-                query=clues,
+            # Generate embedding for the clues
+            embedding = await generate_query_embedding(clues)
+            if not embedding:
+                await interaction.followup.send(
+                    "❌ Failed to process your search query. Please try again.",
+                    ephemeral=True
+                )
+                return
+            
+            # Use proper semantic search with similarity threshold
+            messages = await supabase_client.semantic_search(
+                embedding=embedding,
                 server_id=guild.id,
-                author_id=author.id if author else None,
-                channel_id=in_channel.id if in_channel else None,
-                time_range=time_range,
-                intent="lookup"
+                limit=50  # Get more results for filtering
             )
+            
+            # Apply additional filters if specified
+            if author:
+                messages = [msg for msg in messages if msg.get('author_id') == author.id]
+            
+            if in_channel:
+                messages = [msg for msg in messages if msg.get('channel_id') == in_channel.id]
+            
+            if time_range:
+                from datetime import datetime
+                start_time, end_time = time_range
+                filtered_messages = []
+                for msg in messages:
+                    msg_time = msg.get('created_at')
+                    if msg_time:
+                        if isinstance(msg_time, str):
+                            msg_time = datetime.fromisoformat(msg_time.replace('Z', '+00:00'))
+                        if start_time and msg_time < start_time:
+                            continue
+                        if end_time and msg_time > end_time:
+                            continue
+                    filtered_messages.append(msg)
+                messages = filtered_messages
+            
+            # Filter by similarity threshold (only show relevant results)
+            messages = [msg for msg in messages if msg.get('similarity', 0) >= 0.5]
             
             if not messages or len(messages) == 0:
                 embed = discord.Embed(
@@ -711,7 +745,7 @@ class BotCommands:
             # Format results as exact message list
             embed = discord.Embed(
                 title="🔍 Lookup Results",
-                description=f"Found {len(messages)} message(s) matching: \"{clues}\"",
+                description=f"Found {len(messages)} relevant message(s) matching: \"{clues}\"\n*Showing messages with >50% relevance*",
                 color=discord.Color.blue()
             )
             
@@ -736,7 +770,7 @@ class BotCommands:
                     if channel_name and not channel_name.startswith("#"):
                         channel_name = f"#{channel_name}"
                 
-                # Format timestamp
+                # Format timestamp with Discord timestamp for automatic timezone conversion
                 if timestamp:
                     try:
                         from datetime import datetime
@@ -744,7 +778,10 @@ class BotCommands:
                             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                         else:
                             dt = timestamp
-                        date_str = dt.strftime("%b %d, %Y at %I:%M %p")
+                        
+                        # Use Discord timestamp format for automatic user timezone conversion
+                        unix_timestamp = int(dt.timestamp())
+                        date_str = f"<t:{unix_timestamp}:f>"  # Discord auto-converts to user's local time
                     except:
                         date_str = str(timestamp)[:19]
                 else:
