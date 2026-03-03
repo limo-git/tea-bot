@@ -147,7 +147,7 @@ async def understand_query(query: str) -> dict:
         }
 
 
-async def graph_traversal(intent: str, understanding: dict, time_range: tuple = None) -> list[dict]:
+async def graph_traversal(intent: str, understanding: dict, server_id: int, time_range: tuple = None) -> list[dict]:
     """Step 2: Run the appropriate Cypher query based on intent."""
     driver = await get_driver()
     primary = understanding.get("primary_entity", "")
@@ -157,11 +157,11 @@ async def graph_traversal(intent: str, understanding: dict, time_range: tuple = 
         return []
 
     # Build params based on intent
-    params = {}
+    params = {"server_id": server_id}  # CRITICAL: Always filter by server
     if intent == "relational" and secondary:
-        params = {"entity_a": primary, "entity_b": secondary}
+        params.update({"entity_a": primary, "entity_b": secondary})
     else:
-        params = {"entity_name": primary}
+        params.update({"entity_name": primary})
     
     # Add time filter for recent data
     # For summarization queries, default to last 3 days
@@ -262,7 +262,7 @@ async def run_query_pipeline(
         )
 
     # Step 2 — Standard Graph traversal (for non-temporal queries)
-    graph_results = await graph_traversal(intent, understanding, time_range)
+    graph_results = await graph_traversal(intent, understanding, server_id, time_range)
 
     # Step 3 — Vector search (always runs in parallel for semantic coverage)
     # For lookup queries, use the entity name + search terms for better semantic matching

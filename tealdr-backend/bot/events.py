@@ -143,7 +143,7 @@ class BotEvents:
             logger.error(f"Graph entity extraction failed for message {message_data.get('message_id')}: {e}", exc_info=True)
 
     async def on_reaction_add(self, reaction: discord.Reaction, user: discord.User):
-        """Handle reactions to bot messages for feedback."""
+        """Handle reactions to bot messages for feedback and sources reveal."""
         if user.bot:
             return
         
@@ -151,16 +151,28 @@ class BotEvents:
         if reaction.message.author.id != self.bot.user.id:
             return
         
-        # Check if this is a feedback reaction
-        if str(reaction.emoji) not in ['👍', '👎']:
+        # Get the response data if we tracked it
+        response_data = self.bot_responses.get(reaction.message.id)
+        
+        if not response_data:
+            logger.debug(f"No tracked response data for message {reaction.message.id}")
             return
         
         try:
-            # Get the response data if we tracked it
-            response_data = self.bot_responses.get(reaction.message.id)
+            # Handle sources reveal (📊 reaction)
+            if str(reaction.emoji) == '📊':
+                sources = response_data.get('sources')
+                if sources:
+                    # Send sources as ephemeral message to the user
+                    await reaction.message.channel.send(
+                        f"**📊 Sources for {user.mention}:**\n{sources}",
+                        delete_after=60  # Auto-delete after 60 seconds
+                    )
+                    logger.info(f"Revealed sources to {user} for message {reaction.message.id}")
+                return
             
-            if not response_data:
-                logger.debug(f"No tracked response data for message {reaction.message.id}")
+            # Handle feedback reactions (👍 👎)
+            if str(reaction.emoji) not in ['👍', '👎']:
                 return
             
             feedback_type = 'positive' if str(reaction.emoji) == '👍' else 'negative'
@@ -189,13 +201,14 @@ class BotEvents:
                 )
         
         except Exception as e:
-            logger.error(f"Error handling reaction feedback: {e}")
+            logger.error(f"Error handling reaction: {e}")
     
-    def track_response(self, message_id, query, response):
-        """Track a bot response for feedback collection."""
+    def track_response(self, message_id, query, response, sources=None):
+        """Track a bot response for feedback collection and sources reveal."""
         self.bot_responses[message_id] = {
             'query': query,
-            'response': response
+            'response': response,
+            'sources': sources
         }
         
         # Clean up old tracked responses (keep last 100)

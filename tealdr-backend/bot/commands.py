@@ -53,7 +53,59 @@ rate_limiter = RateLimiter()
 class BotCommands:
     def __init__(self, bot):
         self.bot = bot
-        self.excluded_channels = Config.get_excluded_channel_ids()
+    
+    def _format_sources(self, messages, guild):
+        """Format sources for later reveal."""
+        sources_lines = []
+        for msg in messages[:10]:  # Show up to 10 sources
+            author = msg.get("author_name") or msg.get("author", "Unknown")
+            content = msg.get("content", "")
+            timestamp = msg.get("created_at") or msg.get("timestamp", "")
+            
+            # Get channel name
+            channel_id = msg.get("channel_id")
+            channel_name = None
+            if channel_id:
+                try:
+                    channel = guild.get_channel(int(channel_id))
+                    if channel:
+                        channel_name = f"#{channel.name}"
+                except:
+                    pass
+            if not channel_name:
+                channel_name = msg.get("channel", "")
+                if channel_name and not channel_name.startswith("#"):
+                    channel_name = f"#{channel_name}"
+            
+            # Format timestamp to readable date
+            if timestamp:
+                try:
+                    from datetime import datetime
+                    if isinstance(timestamp, str):
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    else:
+                        dt = timestamp
+                    date_str = dt.strftime("%b %d, %Y")
+                except:
+                    date_str = str(timestamp)[:10]
+            else:
+                date_str = "Unknown date"
+            
+            # Truncate long messages
+            if len(content) > 100:
+                content = content[:100] + "..."
+            
+            # Format with channel name if available
+            if channel_name:
+                sources_lines.append(f"{author} in {channel_name} ({date_str}): \"{content}\"")
+            else:
+                sources_lines.append(f"{author} ({date_str}): \"{content}\"")
+        
+        sources_text = "\n".join(sources_lines)
+        if len(sources_text) > 1024:  # Discord field limit
+            sources_text = sources_text[:1020] + "..."
+        
+        return sources_text
     
     async def ask_command(
         self, 
@@ -230,63 +282,10 @@ class BotCommands:
                     inline=False
                 )
             
-            # Add sources with exact message quotes and dates
-            if embeds and len(messages) > 0:
-                # Format sources as exact quotes with dates
-                sources_lines = []
-                for msg in messages[:10]:  # Show up to 10 sources
-                    author = msg.get("author_name") or msg.get("author", "Unknown")
-                    content = msg.get("content", "")
-                    timestamp = msg.get("created_at") or msg.get("timestamp", "")
-                    
-                    # Get channel name
-                    channel_id = msg.get("channel_id")
-                    channel_name = None
-                    if channel_id:
-                        try:
-                            channel = guild.get_channel(int(channel_id))
-                            if channel:
-                                channel_name = f"#{channel.name}"
-                        except:
-                            pass
-                    if not channel_name:
-                        channel_name = msg.get("channel", "")
-                        if channel_name and not channel_name.startswith("#"):
-                            channel_name = f"#{channel_name}"
-                    
-                    # Format timestamp to readable date
-                    if timestamp:
-                        try:
-                            from datetime import datetime
-                            if isinstance(timestamp, str):
-                                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                            else:
-                                dt = timestamp
-                            date_str = dt.strftime("%b %d, %Y")
-                        except:
-                            date_str = str(timestamp)[:10]
-                    else:
-                        date_str = "Unknown date"
-                    
-                    # Truncate long messages
-                    if len(content) > 100:
-                        content = content[:100] + "..."
-                    
-                    # Format with channel name if available
-                    if channel_name:
-                        sources_lines.append(f"**{author}** in {channel_name} ({date_str}): \"{content}\"")
-                    else:
-                        sources_lines.append(f"**{author}** ({date_str}): \"{content}\"")
-                
-                sources_text = "\n".join(sources_lines)
-                if len(sources_text) > 1024:  # Discord field limit
-                    sources_text = sources_text[:1020] + "..."
-                
-                embeds[-1].add_field(  # Add to last embed
-                    name="📊 Sources",
-                    value=sources_text,
-                    inline=False
-                )
+            # Store sources data for later reveal (don't show by default)
+            sources_data = None
+            if len(messages) > 0:
+                sources_data = self._format_sources(messages, guild)
             
             # Send with pagination if multiple embeds
             if len(embeds) > 1:
@@ -296,12 +295,14 @@ class BotCommands:
             else:
                 sent_message = await interaction.followup.send(embed=embeds[0])
             
-            # Track this response for feedback
-            self.bot.events.track_response(sent_message.id, query, response)
+            # Track this response for feedback and sources
+            self.bot.events.track_response(sent_message.id, query, response, sources_data)
             
-            # Add reaction options for feedback
+            # Add reaction options for feedback and sources
             await sent_message.add_reaction('👍')
             await sent_message.add_reaction('👎')
+            if sources_data:
+                await sent_message.add_reaction('📊')  # React with 📊 to view sources
             
             logger.info(f"Sent response to {interaction.user}")
         

@@ -6,10 +6,9 @@ Never use string interpolation — all values go through parameters.
 # ── lookup ────────────────────────────────────────────────────────────────────
 LOOKUP_QUERY = """
 // Fuzzy match entity name (case-insensitive, partial match)
-MATCH (e:Entity)
+MATCH (s:Server {id: $server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)-[:MENTIONS]->(e:Entity)
 WHERE toLower(e.name) CONTAINS toLower($entity_name)
    OR toLower($entity_name) CONTAINS toLower(e.name)
-OPTIONAL MATCH (e)<-[:MENTIONS]-(m:Message)-[:IN_CHANNEL]->(c:Channel)
 OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
 WHERE m.timestamp IS NOT NULL
 WITH e, m, c, a
@@ -29,9 +28,11 @@ LIMIT 5
 
 # ── relational ────────────────────────────────────────────────────────────────
 RELATIONAL_QUERY = """
-MATCH path = shortestPath(
-    (a:Entity {name: $entity_a})-[*1..5]-(b:Entity {name: $entity_b})
-)
+// Find relationship path between two entities within the same server
+MATCH (s:Server {id: $server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)-[:MENTIONS]->(a:Entity {name: $entity_a})
+MATCH (s)<-[:IN_SERVER]-(c2:Channel)<-[:IN_CHANNEL]-(m2:Message)-[:MENTIONS]->(b:Entity {name: $entity_b})
+WITH DISTINCT a, b
+MATCH path = shortestPath((a)-[*1..5]-(b))
 RETURN [node IN nodes(path) | {name: node.name, type: node.type}] AS nodes,
        [rel  IN relationships(path) | type(rel)]                   AS relationships,
        length(path)                                                 AS hops
@@ -40,7 +41,10 @@ LIMIT 5
 
 # ── evolutionary ──────────────────────────────────────────────────────────────
 EVOLUTIONARY_QUERY = """
-MATCH (e:Entity {name: $entity_name})-[r]->(related:Entity)
+// Find entity evolution within the same server
+MATCH (s:Server {id: $server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)-[:MENTIONS]->(e:Entity {name: $entity_name})
+WITH DISTINCT e
+MATCH (e)-[r]->(related:Entity)
 RETURN e.name          AS entity,
        type(r)         AS relationship,
        related.name    AS related_entity,
@@ -53,12 +57,14 @@ LIMIT 30
 
 # ── expert_finding ────────────────────────────────────────────────────────────
 EXPERT_FINDING_QUERY = """
-MATCH (a:Author)-[r:EXPERT_IN]->(e:Entity {name: $entity_name})
+MATCH (s:Server {id: $server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)-[:MENTIONS]->(e:Entity {name: $entity_name})
+MATCH (m)<-[:SENT]-(a:Author)
+WITH a, e, count(m) AS mention_count
 RETURN a.username       AS expert,
        a.discord_id     AS discord_id,
-       r.mention_count  AS mention_count,
+       mention_count    AS mention_count,
        e.name           AS topic
-ORDER BY r.mention_count DESC
+ORDER BY mention_count DESC
 LIMIT 10
 """
 
@@ -66,8 +72,8 @@ LIMIT 10
 SUMMARIZATION_QUERY = """
 // If entity is "server" or generic, return recent messages from all channels
 CALL {
-  WITH $entity_name AS entity, $time_filter AS time_filter
-  MATCH (m:Message)-[:IN_CHANNEL]->(c:Channel)
+  WITH $entity_name AS entity, $time_filter AS time_filter, $server_id AS server_id
+  MATCH (s:Server {id: server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)
   OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
   WHERE m.timestamp IS NOT NULL
     AND toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
@@ -81,8 +87,8 @@ CALL {
   
   UNION
   
-  WITH $entity_name AS entity, $time_filter AS time_filter
-  MATCH (author:Author)-[:SENT]->(m:Message)-[:IN_CHANNEL]->(c:Channel)
+  WITH $entity_name AS entity, $time_filter AS time_filter, $server_id AS server_id
+  MATCH (s:Server {id: server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)<-[:SENT]-(author:Author)
   WHERE toLower(author.username) CONTAINS toLower(entity)
     AND NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
     AND (time_filter IS NULL OR datetime(m.timestamp) >= datetime(time_filter))
@@ -95,8 +101,8 @@ CALL {
   
   UNION
   
-  WITH $entity_name AS entity, $time_filter AS time_filter
-  MATCH (e:Entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
+  WITH $entity_name AS entity, $time_filter AS time_filter, $server_id AS server_id
+  MATCH (s:Server {id: server_id})<-[:IN_SERVER]-(c2:Channel)<-[:IN_CHANNEL]-(m2:Message)-[:MENTIONS]->(e:Entity)
   OPTIONAL MATCH (m2)<-[:SENT]-(a2:Author)
   WHERE toLower(e.name) CONTAINS toLower(entity)
     AND NOT toLower(entity) IN ['server', 'activity', 'recent', 'messages', 'events', 'happening', 'discussion']
@@ -163,14 +169,14 @@ ORDER BY ch.start_time ASC
 
 # ── temporal context: find related discussions across time ───────────────────
 TEMPORAL_CONTEXT_QUERY = """
-// Find messages about the same entities/topics across different time periods
-MATCH (e:Entity)<-[:MENTIONS]-(m1:Message)-[:IN_CHANNEL]->(c1:Channel)
+// Find messages about the same entities/topics across different time periods within the same server
+MATCH (s:Server {id: $server_id})<-[:IN_SERVER]-(c1:Channel)<-[:IN_CHANNEL]-(m1:Message)-[:MENTIONS]->(e:Entity)
 WHERE toLower(e.name) CONTAINS toLower($entity_name)
   AND m1.timestamp IS NOT NULL
 
 // Find related messages through entity connections
 OPTIONAL MATCH (e)-[:RELATES_TO|CONTINUES*1..2]-(related_entity:Entity)
-OPTIONAL MATCH (related_entity)<-[:MENTIONS]-(m2:Message)-[:IN_CHANNEL]->(c2:Channel)
+OPTIONAL MATCH (s)<-[:IN_SERVER]-(c2:Channel)<-[:IN_CHANNEL]-(m2:Message)-[:MENTIONS]->(related_entity)
 WHERE m2.timestamp IS NOT NULL
   AND m2.id <> m1.id
 
@@ -210,13 +216,13 @@ LIMIT 30
 
 # ── conversation threads: find message sequences and continuations ───────────
 CONVERSATION_THREADS_QUERY = """
-// Find conversation threads around a topic
-MATCH (e:Entity)<-[:MENTIONS]-(m:Message)-[:IN_CHANNEL]->(c:Channel)
+// Find conversation threads around a topic within the same server
+MATCH (s:Server {id: $server_id})<-[:IN_SERVER]-(c:Channel)<-[:IN_CHANNEL]-(m:Message)-[:MENTIONS]->(e:Entity)
 WHERE toLower(e.name) CONTAINS toLower($entity_name)
   AND m.timestamp IS NOT NULL
 
-// Find messages in temporal proximity (within 24 hours)
-MATCH (nearby:Message)-[:IN_CHANNEL]->(c)
+// Find messages in temporal proximity (within 24 hours) in the same channel
+MATCH (c)<-[:IN_CHANNEL]-(nearby:Message)
 WHERE nearby.timestamp IS NOT NULL
   AND nearby.id <> m.id
 

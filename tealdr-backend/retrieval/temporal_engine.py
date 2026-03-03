@@ -34,17 +34,17 @@ async def run_temporal_query_pipeline(
     logger.info(f"Temporal pipeline: intent={intent}, entity={primary_entity}, temporal={temporal_context_needed}")
     
     # Step 1: Get primary results based on intent
-    primary_results = await _get_primary_results(intent, understanding, time_range)
+    primary_results = await _get_primary_results(intent, understanding, server_id, time_range)
     
     # Step 2: If temporal context is needed, get related discussions across time
     temporal_results = []
     if temporal_context_needed or intent in ["temporal_context", "conversation_threads"]:
-        temporal_results = await _get_temporal_context(primary_entity, time_scope)
+        temporal_results = await _get_temporal_context(primary_entity, server_id, time_scope)
     
     # Step 3: Get conversation threads for continuity
     thread_results = []
     if intent in ["conversation_threads", "summarization"] or temporal_context_needed:
-        thread_results = await _get_conversation_threads(primary_entity)
+        thread_results = await _get_conversation_threads(primary_entity, server_id)
     
     # Step 4: Combine all graph results
     all_graph_results = []
@@ -82,7 +82,7 @@ async def run_temporal_query_pipeline(
     }
 
 
-async def _get_primary_results(intent: str, understanding: dict, time_range: tuple = None) -> List[dict]:
+async def _get_primary_results(intent: str, understanding: dict, server_id: int, time_range: tuple = None) -> List[dict]:
     """Get primary results based on the main intent."""
     driver = await get_driver()
     primary = understanding.get("primary_entity", "")
@@ -92,11 +92,11 @@ async def _get_primary_results(intent: str, understanding: dict, time_range: tup
         return []
     
     # Build params based on intent
-    params = {}
+    params = {"server_id": server_id}  # CRITICAL: Always filter by server
     if intent == "relational" and secondary:
-        params = {"entity_a": primary, "entity_b": secondary}
+        params.update({"entity_a": primary, "entity_b": secondary})
     else:
-        params = {"entity_name": primary}
+        params.update({"entity_name": primary})
     
     # Add time filter for recent data (default to last 3 days for general queries)
     if time_range:
@@ -121,13 +121,13 @@ async def _get_primary_results(intent: str, understanding: dict, time_range: tup
         return []
 
 
-async def _get_temporal_context(entity_name: str, time_scope: str) -> List[dict]:
+async def _get_temporal_context(entity_name: str, server_id: int, time_scope: str) -> List[dict]:
     """Get related discussions across different time periods."""
     if not entity_name:
         return []
     
     driver = await get_driver()
-    params = {"entity_name": entity_name}
+    params = {"entity_name": entity_name, "server_id": server_id}
     
     try:
         async with driver.session() as session:
@@ -139,13 +139,13 @@ async def _get_temporal_context(entity_name: str, time_scope: str) -> List[dict]
         return []
 
 
-async def _get_conversation_threads(entity_name: str) -> List[dict]:
+async def _get_conversation_threads(entity_name: str, server_id: int) -> List[dict]:
     """Get conversation threads and message sequences."""
     if not entity_name:
         return []
     
     driver = await get_driver()
-    params = {"entity_name": entity_name}
+    params = {"entity_name": entity_name, "server_id": server_id}
     
     try:
         async with driver.session() as session:
