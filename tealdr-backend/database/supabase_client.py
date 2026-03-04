@@ -234,5 +234,125 @@ class SupabaseClient:
         except Exception as e:
             logger.error(f"Error getting message count: {e}")
             return 0
+    
+    async def store_channel_summary(self, server_id: int, channel_id: int, hour_bucket: datetime, 
+                                    summary_text: str, message_count: int, key_topics: list = None, 
+                                    active_users: list = None):
+        """
+        Store a pre-computed hourly channel summary.
+        
+        Args:
+            server_id: Discord server ID
+            channel_id: Discord channel ID
+            hour_bucket: Start of the hour (e.g., 2026-03-04 14:00:00)
+            summary_text: AI-generated summary
+            message_count: Number of messages summarized
+            key_topics: List of main topics discussed
+            active_users: List of user IDs who were active
+        """
+        try:
+            data = {
+                'server_id': server_id,
+                'channel_id': channel_id,
+                'hour_bucket': hour_bucket.isoformat(),
+                'summary_text': summary_text,
+                'message_count': message_count,
+                'key_topics': key_topics or [],
+                'active_users': active_users or []
+            }
+            
+            # Upsert to handle re-summarization
+            result = self.client.table('channel_summaries').upsert(data).execute()
+            logger.info(f"Stored summary for channel {channel_id} at {hour_bucket}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error storing channel summary: {e}")
+            raise
+    
+    async def get_channel_summaries(self, server_id: int, channel_id: int = None, 
+                                    start_time: datetime = None, end_time: datetime = None, 
+                                    limit: int = 100):
+        """
+        Retrieve pre-computed channel summaries for a time range.
+        
+        Args:
+            server_id: Discord server ID
+            channel_id: Optional channel ID filter
+            start_time: Start of time range
+            end_time: End of time range
+            limit: Maximum number of summaries to return
+            
+        Returns:
+            List of channel summaries ordered by hour_bucket DESC
+        """
+        try:
+            query = self.client.table('channel_summaries').select('*').eq('server_id', server_id)
+            
+            if channel_id:
+                query = query.eq('channel_id', channel_id)
+            
+            if start_time:
+                query = query.gte('hour_bucket', start_time.isoformat())
+            
+            if end_time:
+                query = query.lte('hour_bucket', end_time.isoformat())
+            
+            result = query.order('hour_bucket', desc=True).limit(limit).execute()
+            logger.info(f"Retrieved {len(result.data)} channel summaries")
+            return result.data
+            
+        except Exception as e:
+            logger.error(f"Error getting channel summaries: {e}")
+            return []
+    
+    async def get_channels_needing_summary(self, hours_ago: int = 1):
+        """
+        Get list of channels that have new messages but no summary for the last hour.
+        
+        Args:
+            hours_ago: How many hours back to check (default: 1)
+            
+        Returns:
+            List of (server_id, channel_id) tuples needing summarization
+        """
+        try:
+            from datetime import datetime, timedelta
+            
+            # Calculate the hour bucket to check
+            now = datetime.utcnow()
+            hour_bucket = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours_ago)
+            next_hour = hour_bucket + timedelta(hours=1)
+            
+            # Get channels with messages in that hour
+            messages_query = self.client.table('messages')\
+                .select('server_id, channel_id')\
+                .gte('created_at', hour_bucket.isoformat())\
+                .lt('created_at', next_hour.isoformat())\
+                .execute()
+            
+            # Get unique channel combinations
+            channels_with_messages = set()
+            for msg in messages_query.data:
+                channels_with_messages.add((msg['server_id'], msg['channel_id']))
+            
+            # Get channels that already have summaries
+            summaries_query = self.client.table('channel_summaries')\
+                .select('server_id, channel_id')\
+                .eq('hour_bucket', hour_bucket.isoformat())\
+                .execute()
+            
+            channels_with_summaries = set()
+            for summary in summaries_query.data:
+                channels_with_summaries.add((summary['server_id'], summary['channel_id']))
+            
+            # Return channels that need summarization
+            channels_needing_summary = list(channels_with_messages - channels_with_summaries)
+            logger.info(f"Found {len(channels_needing_summary)} channels needing summary for {hour_bucket}")
+            return channels_needing_summary
+            
+        except Exception as e:
+            logger.error(f"Error getting channels needing summary: {e}")
+            return []
 
 supabase_client = SupabaseClient()

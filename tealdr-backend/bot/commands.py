@@ -373,33 +373,56 @@ class BotCommands:
             
             logger.info(f"Generating recap for {interaction.user}: time={time}, user={user}, channel={channel}")
             
-            if user:
-                messages = await supabase_client.get_messages_by_user(
-                    author_id=user.id,
-                    server_id=guild.id,
-                    time_range=time_range,
-                    limit=100
-                )
-            elif channel:
-                messages = await supabase_client.get_messages_by_timerange(
-                    server_id=guild.id,
-                    channel_id=channel.id,
-                    start_time=start_time,
-                    end_time=end_time,
-                    limit=100
-                )
-            else:
-                # In a server, filter by current channel; in DMs, search all channels
-                channel_id = interaction.channel.id if interaction.guild else None
-                messages = await supabase_client.get_messages_by_timerange(
+            # Try to use pre-computed summaries first (much faster and better quality)
+            summaries = None
+            if not user:  # Summaries are per-channel, not per-user
+                channel_id = channel.id if channel else (interaction.channel.id if interaction.guild else None)
+                
+                summaries = await supabase_client.get_channel_summaries(
                     server_id=guild.id,
                     channel_id=channel_id,
                     start_time=start_time,
                     end_time=end_time,
                     limit=100
                 )
+                
+                if summaries and len(summaries) > 0:
+                    logger.info(f"Using {len(summaries)} pre-computed summaries for recap")
             
-            if not messages or len(messages) == 0:
+            # Fallback to raw messages if no summaries available
+            if not summaries:
+                logger.info("No pre-computed summaries available, fetching raw messages")
+                
+                if user:
+                    messages = await supabase_client.get_messages_by_user(
+                        author_id=user.id,
+                        server_id=guild.id,
+                        time_range=time_range,
+                        limit=100
+                    )
+                elif channel:
+                    messages = await supabase_client.get_messages_by_timerange(
+                        server_id=guild.id,
+                        channel_id=channel.id,
+                        start_time=start_time,
+                        end_time=end_time,
+                        limit=100
+                    )
+                else:
+                    # In a server, filter by current channel; in DMs, search all channels
+                    channel_id = interaction.channel.id if interaction.guild else None
+                    messages = await supabase_client.get_messages_by_timerange(
+                        server_id=guild.id,
+                        channel_id=channel_id,
+                        start_time=start_time,
+                        end_time=end_time,
+                        limit=100
+                    )
+            else:
+                messages = None  # Using summaries instead
+            
+            # Check if we have any data (summaries or messages)
+            if not summaries and (not messages or len(messages) == 0):
                 embed = discord.Embed(
                     title="📅 Recap",
                     description="No messages found in this timeframe.",
@@ -408,14 +431,56 @@ class BotCommands:
                 await interaction.followup.send(embed=embed)
                 return
             
-            logger.info(f"Found {len(messages)} messages for recap")
+            if summaries:
+                logger.info(f"Using {len(summaries)} pre-computed summaries for recap")
+            else:
+                logger.info(f"Found {len(messages)} messages for recap")
             
             persona = await server_settings_client.get_bot_persona(guild.id)
             requester_name = interaction.user.display_name
             
-            # Try Graph RAG first for better context
+            # Generate recap response
             response = None
-            if Config.GRAPH_RAG_ENABLED and len(messages) > 0:
+            
+            # If using pre-computed summaries, synthesize them
+            if summaries:
+                # Format summaries for synthesis
+                summary_texts = []
+                for summary in summaries:
+                    hour = summary.get('hour_bucket', '')
+                    text = summary.get('summary_text', '')
+                    msg_count = summary.get('message_count', 0)
+                    topics = summary.get('key_topics', [])
+                    
+                    summary_texts.append(f"**{hour}** ({msg_count} messages): {text}")
+                    if topics:
+                        summary_texts.append(f"  Topics: {', '.join(topics)}")
+                
+                summaries_str = "\n\n".join(summary_texts)
+                
+                prompt = f"""You are {persona}
+
+Synthesize these hourly summaries into a cohesive recap for {requester_name}:
+
+{summaries_str}
+
+Create a natural, flowing summary that:
+1. Highlights the main themes and developments
+2. Mentions key decisions or announcements
+3. Notes any significant activity patterns
+4. Keeps it concise (3-4 sentences)
+
+Recap:"""
+                
+                response = await gemini_client.generate_response(
+                    prompt=prompt,
+                    use_cache=False,
+                    apply_anti_hallucination=False
+                )
+                logger.info("Recap generated from pre-computed summaries")
+            
+            # Otherwise use Graph RAG or fallback to Gemini with raw messages
+            elif Config.GRAPH_RAG_ENABLED and messages and len(messages) > 0:
                 try:
                     from retrieval.context_assembler import format_context_for_prompt
                     # Convert messages to context format
