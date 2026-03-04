@@ -7,6 +7,17 @@ import asyncio
 
 logger = get_logger(__name__)
 
+# Anti-hallucination instruction for all RAG queries
+ANTI_HALLUCINATION_INSTRUCTION = """
+CRITICAL INSTRUCTION: You are answering based ONLY on the Discord messages provided below.
+If the messages do not contain sufficient information to answer the question, you MUST respond with:
+"I don't have enough information in the server history to answer this."
+
+Do not infer, assume, or use knowledge beyond the provided messages.
+Do not fabricate details, dates, or events that are not explicitly mentioned.
+If you are uncertain, say so rather than guessing.
+"""
+
 class GeminiClient:
     def __init__(self):
         self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
@@ -16,10 +27,11 @@ class GeminiClient:
         )
         logger.info("Gemini client initialized")
     
-    async def generate_response(self, prompt, context_messages=None, use_cache=True):
+    async def generate_response(self, prompt, context_messages=None, use_cache=True, apply_anti_hallucination=True):
         try:
-            if context_messages:
-                full_prompt = prompt
+            # Prepend anti-hallucination instruction for RAG queries
+            if apply_anti_hallucination and context_messages:
+                full_prompt = f"{ANTI_HALLUCINATION_INSTRUCTION}\n\n{prompt}"
             else:
                 full_prompt = prompt
             

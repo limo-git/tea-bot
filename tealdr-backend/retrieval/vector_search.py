@@ -5,6 +5,10 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
+# Confidence threshold for semantic search results
+# Results below this similarity score are considered too weak to use
+CONFIDENCE_THRESHOLD = 0.35
+
 
 async def vector_search(query: str, server_id: int, author_id: int = None,
                         channel_id: int = None, time_range: tuple = None, 
@@ -61,13 +65,19 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             limit=Config.VECTOR_TOP_K,
         )
 
-        logger.info(f"Vector search returned {len(results)} results for query '{query[:60]}': {len(results)} messages")
+        logger.info(f"Vector search returned {len(results)} results before confidence filtering")
         
-        # If no results from semantic search, log warning
-        if not results:
-            logger.warning(f"Semantic search returned no results for query: {query[:60]}")
+        # Apply confidence threshold - filter out low-relevance results
+        filtered_results = [msg for msg in results if msg.get('similarity', 0) >= CONFIDENCE_THRESHOLD]
         
-        return results
+        if len(filtered_results) < len(results):
+            logger.info(f"Confidence threshold filtering: {len(results)} -> {len(filtered_results)} results (removed {len(results) - len(filtered_results)} low-confidence results)")
+        
+        # If no results pass confidence threshold, log warning
+        if not filtered_results:
+            logger.warning(f"No results passed confidence threshold ({CONFIDENCE_THRESHOLD}) for query: {query[:60]}")
+        
+        return filtered_results
 
     except Exception as e:
         logger.error(f"Vector search failed: {e}")
