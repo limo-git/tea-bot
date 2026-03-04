@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any
+from typing import Any, Dict, List
 from tenacity import retry, stop_after_attempt, wait_exponential
 from google import genai
 from google.genai import types
@@ -10,12 +10,171 @@ logger = logging.getLogger(__name__)
 
 _client: genai.Client | None = None
 
+# P2: Entity quality thresholds
+MIN_ENTITY_QUALITY_SCORE = 0.6  # Minimum quality score to keep an entity
+MIN_DESCRIPTION_LENGTH = 10  # Minimum description length for valid entities
+ENTITY_NAME_MIN_LENGTH = 2  # Minimum entity name length
+ENTITY_NAME_MAX_LENGTH = 100  # Maximum entity name length
+
 
 def _get_client() -> genai.Client:
     global _client
     if _client is None:
         _client = genai.Client(api_key=Config.GEMINI_API_KEY)
     return _client
+
+
+def calculate_entity_quality_score(entity: dict, context: str = "") -> float:
+    """
+    Calculate quality score for an entity (0.0 to 1.0).
+    
+    Factors:
+    - Name validity (length, format)
+    - Description quality (length, specificity)
+    - Type appropriateness
+    - Context relevance
+    
+    Args:
+        entity: Entity dict with name, type, description
+        context: Original message context for relevance check
+        
+    Returns:
+        Quality score between 0.0 and 1.0
+    """
+    score = 0.0
+    
+    # Factor 1: Name validity (0.3 weight)
+    name = entity.get("name", "")
+    if not name or len(name) < ENTITY_NAME_MIN_LENGTH:
+        return 0.0  # Invalid entity
+    
+    if len(name) > ENTITY_NAME_MAX_LENGTH:
+        score += 0.1  # Penalize overly long names
+    elif ENTITY_NAME_MIN_LENGTH <= len(name) <= 50:
+        score += 0.3  # Good name length
+    else:
+        score += 0.2
+    
+    # Factor 2: Description quality (0.3 weight)
+    description = entity.get("description", "")
+    if len(description) >= MIN_DESCRIPTION_LENGTH:
+        score += 0.2
+        # Bonus for detailed descriptions
+        if len(description) >= 50:
+            score += 0.1
+    
+    # Factor 3: Type validity (0.2 weight)
+    valid_types = {"person", "topic", "technology", "decision", "bug", "question", "project"}
+    entity_type = entity.get("type", "")
+    if entity_type in valid_types:
+        score += 0.2
+    
+    # Factor 4: Mentioned by field (0.2 weight)
+    if entity.get("mentioned_by"):
+        score += 0.2
+    
+    return min(score, 1.0)
+
+
+def deduplicate_entities(entities: List[dict]) -> List[dict]:
+    """
+    Deduplicate entities by normalizing names and merging similar ones.
+    
+    Args:
+        entities: List of entity dicts
+        
+    Returns:
+        Deduplicated list of entities
+    """
+    if not entities:
+        return []
+    
+    # Group by normalized name and type
+    entity_map = {}
+    
+    for entity in entities:
+        name = entity.get("name", "").strip()
+        entity_type = entity.get("type", "")
+        
+        # Normalize name based on type
+        if entity_type in {"topic", "technology", "project"}:
+            # Lowercase for technical terms
+            normalized_name = name.lower()
+        else:
+            # Keep original case for people
+            normalized_name = name
+        
+        key = (normalized_name, entity_type)
+        
+        if key not in entity_map:
+            entity_map[key] = entity
+        else:
+            # Merge: prefer longer description
+            existing = entity_map[key]
+            if len(entity.get("description", "")) > len(existing.get("description", "")):
+                entity_map[key] = entity
+    
+    return list(entity_map.values())
+
+
+def validate_entity(entity: dict) -> bool:
+    """
+    Validate entity structure and content.
+    
+    Args:
+        entity: Entity dict to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    # Required fields
+    if not entity.get("name") or not entity.get("type"):
+        return False
+    
+    # Name length check
+    name = entity["name"]
+    if len(name) < ENTITY_NAME_MIN_LENGTH or len(name) > ENTITY_NAME_MAX_LENGTH:
+        return False
+    
+    # Type check
+    valid_types = {"person", "topic", "technology", "decision", "bug", "question", "project"}
+    if entity["type"] not in valid_types:
+        return False
+    
+    # Quality score check
+    quality_score = calculate_entity_quality_score(entity)
+    if quality_score < MIN_ENTITY_QUALITY_SCORE:
+        return False
+    
+    return True
+
+
+def filter_low_quality_entities(entities: List[dict], context: str = "") -> List[dict]:
+    """
+    Filter out low-quality entities based on validation and quality scores.
+    
+    Args:
+        entities: List of entity dicts
+        context: Original message context
+        
+    Returns:
+        Filtered list of high-quality entities
+    """
+    filtered = []
+    
+    for entity in entities:
+        if validate_entity(entity):
+            quality_score = calculate_entity_quality_score(entity, context)
+            entity["quality_score"] = quality_score
+            
+            if quality_score >= MIN_ENTITY_QUALITY_SCORE:
+                filtered.append(entity)
+            else:
+                logger.debug(f"Filtered low-quality entity: {entity.get('name')} (score: {quality_score:.2f})")
+        else:
+            logger.debug(f"Filtered invalid entity: {entity.get('name')}")
+    
+    return filtered
 
 
 EXTRACTION_PROMPT = """You are an expert knowledge graph builder for Discord communities.
@@ -119,6 +278,22 @@ async def extract_entities_from_chunk(chunk_text: str, chunk_metadata: dict) -> 
         result.setdefault("sentiment", "neutral")
         result.setdefault("importance_score", 5)
         result["chunk_metadata"] = chunk_metadata
+
+        # P2: Apply entity quality filtering and deduplication
+        original_count = len(result['entities'])
+        
+        # Filter low-quality entities
+        result['entities'] = filter_low_quality_entities(result['entities'], chunk_text)
+        
+        # Deduplicate entities
+        result['entities'] = deduplicate_entities(result['entities'])
+        
+        filtered_count = len(result['entities'])
+        if filtered_count < original_count:
+            logger.info(
+                f"Entity quality filtering: {original_count} -> {filtered_count} entities "
+                f"(removed {original_count - filtered_count} low-quality)"
+            )
 
         logger.info(
             f"Extracted {len(result['entities'])} entities, "

@@ -157,20 +157,104 @@ async def upsert_chunk(session, chunk_id: str, text: str, channel_id: int, chann
 
 
 async def infer_expertise(session, author_id: int, threshold: int = None):
-    """Create EXPERT_IN relationships when an author mentions an entity >= threshold times."""
+    """
+    Create EXPERT_IN relationships when an author mentions an entity >= threshold times.
+    
+    P2 Enhancement: Adds confidence score based on:
+    - Mention count (higher = more confident)
+    - Recency of mentions (recent = more confident)
+    - Entity type (technical topics = higher weight)
+    """
     if threshold is None:
         threshold = Config.EXPERT_IN_THRESHOLD
+    
     await session.run(
         """
         MATCH (a:Author {discord_id: $author_id})-[:SENT]->(m:Message)-[:MENTIONS]->(e:Entity)
-        WITH a, e, count(m) AS mentions
+        WITH a, e, count(m) AS mentions, max(m.timestamp) AS last_mention
         WHERE mentions >= $threshold
+        
+        // Calculate confidence score (0.0 to 1.0)
+        // Base score from mention count (normalized)
+        WITH a, e, mentions, last_mention,
+             CASE 
+                 WHEN mentions >= 20 THEN 0.5
+                 WHEN mentions >= 10 THEN 0.4
+                 WHEN mentions >= 5 THEN 0.3
+                 ELSE 0.2
+             END AS base_score
+        
+        // Bonus for technical entities
+        WITH a, e, mentions, last_mention, base_score,
+             CASE 
+                 WHEN e.type IN ['technology', 'project'] THEN 0.2
+                 WHEN e.type IN ['topic', 'decision'] THEN 0.1
+                 ELSE 0.0
+             END AS type_bonus
+        
+        // Recency bonus (last 30 days)
+        WITH a, e, mentions, last_mention, base_score, type_bonus,
+             CASE 
+                 WHEN duration.between(datetime(last_mention), datetime()).days <= 7 THEN 0.3
+                 WHEN duration.between(datetime(last_mention), datetime()).days <= 30 THEN 0.2
+                 WHEN duration.between(datetime(last_mention), datetime()).days <= 90 THEN 0.1
+                 ELSE 0.0
+             END AS recency_bonus
+        
+        WITH a, e, mentions, last_mention,
+             base_score + type_bonus + recency_bonus AS confidence_score
+        
         MERGE (a)-[r:EXPERT_IN]->(e)
-        SET r.mention_count = mentions
+        SET r.mention_count = mentions,
+            r.confidence_score = confidence_score,
+            r.last_updated = datetime()
         """,
         author_id=author_id,
         threshold=threshold,
     )
+
+
+async def get_experts_for_entity(session, entity_name: str, entity_type: str, min_confidence: float = 0.5):
+    """
+    Get experts for a specific entity, ordered by confidence score.
+    
+    Args:
+        session: Neo4j session
+        entity_name: Name of the entity
+        entity_type: Type of the entity
+        min_confidence: Minimum confidence score (default 0.5)
+        
+    Returns:
+        List of expert dicts with author info and confidence scores
+    """
+    result = await session.run(
+        """
+        MATCH (a:Author)-[r:EXPERT_IN]->(e:Entity {name: $name, type: $type})
+        WHERE r.confidence_score >= $min_confidence
+        RETURN a.discord_id AS discord_id,
+               a.username AS username,
+               r.mention_count AS mention_count,
+               r.confidence_score AS confidence_score,
+               r.last_updated AS last_updated
+        ORDER BY r.confidence_score DESC
+        LIMIT 10
+        """,
+        name=entity_name,
+        type=entity_type,
+        min_confidence=min_confidence,
+    )
+    
+    experts = []
+    async for record in result:
+        experts.append({
+            "discord_id": record["discord_id"],
+            "username": record["username"],
+            "mention_count": record["mention_count"],
+            "confidence_score": record["confidence_score"],
+            "last_updated": record["last_updated"],
+        })
+    
+    return experts
 
 
 async def build_graph_from_extraction(extraction_result: dict, messages: list[dict]):
