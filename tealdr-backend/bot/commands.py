@@ -168,13 +168,27 @@ class BotCommands:
             # Single server search
             guild = guilds[0]
             
-            # Check for conversation context
+            # P3: Check for conversation context and calculate relevance
             has_context = conversation_context.has_context(interaction.user.id)
             context_str = ""
+            context_relevance = 0.0
             
             if has_context:
-                context_str = conversation_context.format_context_for_prompt(interaction.user.id)
-                logger.info(f"Using conversation context for {interaction.user}")
+                # Calculate how relevant the context is to this query
+                context_relevance = conversation_context.calculate_context_relevance(
+                    interaction.user.id, 
+                    query
+                )
+                
+                # Only use context if it's relevant (score > 0.3)
+                if context_relevance > 0.3:
+                    context_str = conversation_context.format_context_for_prompt(
+                        interaction.user.id,
+                        include_sources=True
+                    )
+                    logger.info(f"Using conversation context for {interaction.user} (relevance: {context_relevance:.2f})")
+                else:
+                    logger.info(f"Context exists but not relevant (score: {context_relevance:.2f}), skipping")
             
             # Priority order for user filtering:
             # 1. from_user parameter (explicit filter)
@@ -282,12 +296,17 @@ class BotCommands:
                 await interaction.followup.send(embed=error_embed)
                 return
             
-            # Save to conversation context
+            # P3: Save to conversation context with source anchoring
+            source_message_ids = [msg.get('message_id') for msg in messages if msg.get('message_id')]
+            entities = pipeline_result.get('understanding', {}).get('search_terms', [])
+            
             conversation_context.add_query(
                 user_id=interaction.user.id,
                 query=query,
                 response=response,
-                mentioned_user=mentioned_user.id if mentioned_user else None
+                mentioned_user=mentioned_user.id if mentioned_user else None,
+                source_messages=source_message_ids,  # P3: Source anchoring
+                entities=entities  # P3: Entity tracking
             )
             
             # Create rich embed(s) for response

@@ -320,6 +320,20 @@ async def run_query_pipeline(
         mentions_user_id=mentions_user_id,
     )
 
+    # P3: CRAG refinement loop for low-confidence queries
+    from retrieval.crag_refiner import refine_and_retrieve
+    
+    vector_results = await refine_and_retrieve(
+        original_query=query,
+        original_results=vector_results,
+        intent=intent,
+        server_id=server_id,
+        author_id=author_id,
+        channel_id=channel_id,
+        time_range=time_range,
+        mentions_user_id=mentions_user_id
+    )
+
     # Step 4 — Context assembly
     context = assemble_context(graph_results, vector_results, intent)
 
