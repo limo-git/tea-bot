@@ -113,6 +113,8 @@ class BotCommands:
         query: str,
         in_channel: discord.TextChannel = None,
         in_thread: discord.Thread = None,
+        from_user: discord.User = None,
+        mentions: discord.User = None,
         from_date: str = None,
         to_date: str = None,
         min_length: int = None,
@@ -174,15 +176,35 @@ class BotCommands:
                 context_str = conversation_context.format_context_for_prompt(interaction.user.id)
                 logger.info(f"Using conversation context for {interaction.user}")
             
-            mentioned_user = extract_user_mention(query, guild)
+            # Priority order for user filtering:
+            # 1. from_user parameter (explicit filter)
+            # 2. User mention in query (@user)
+            # 3. Last mentioned user from context
+            mentioned_user = None
             
-            # If no user mentioned but we have context, use last mentioned user
-            if not mentioned_user and has_context:
-                last_user_id = conversation_context.get_last_mentioned_user(interaction.user.id)
-                if last_user_id:
-                    mentioned_user = guild.get_member(last_user_id)
-                    if mentioned_user:
-                        logger.info(f"Using last mentioned user from context: {mentioned_user}")
+            if from_user:
+                # Use the from_user parameter if provided
+                mentioned_user = guild.get_member(from_user.id)
+                if mentioned_user:
+                    logger.info(f"Filtering by from_user parameter: {mentioned_user}")
+            else:
+                # Fall back to extracting from query
+                mentioned_user = extract_user_mention(query, guild)
+                
+                # If no user mentioned but we have context, use last mentioned user
+                if not mentioned_user and has_context:
+                    last_user_id = conversation_context.get_last_mentioned_user(interaction.user.id)
+                    if last_user_id:
+                        mentioned_user = guild.get_member(last_user_id)
+                        if mentioned_user:
+                            logger.info(f"Using last mentioned user from context: {mentioned_user}")
+            
+            # Handle mentions parameter (filter messages that mention a specific user)
+            mentioned_in_message = None
+            if mentions:
+                mentioned_in_message = guild.get_member(mentions.id)
+                if mentioned_in_message:
+                    logger.info(f"Filtering messages that mention: {mentioned_in_message}")
             
             time_keyword = extract_time_keywords(query)
             time_range = parse_time_range(time_keyword) if time_keyword else None
@@ -213,7 +235,9 @@ class BotCommands:
             
             logger.info(f"Processing query from {interaction.user}: {query}")
             if mentioned_user:
-                logger.info(f"Filtering by user: {mentioned_user}")
+                logger.info(f"Filtering by user (from): {mentioned_user}")
+            if mentioned_in_message:
+                logger.info(f"Filtering by mentions: {mentioned_in_message}")
             if time_range:
                 logger.info(f"Filtering by time range: {time_range}")
             if in_channel:
@@ -238,6 +262,7 @@ class BotCommands:
                     channel_id=in_channel.id if in_channel else None,
                     time_range=time_range,
                     author_username=mentioned_user.name if mentioned_user else None,
+                    mentions_user_id=mentioned_in_message.id if mentioned_in_message else None,
                 )
                 response = await generate_answer(
                     query=query,
@@ -1852,6 +1877,8 @@ def setup_commands(bot):
         query="Your question (e.g., 'what did @user talk about yesterday?')",
         in_channel="Optional: Search only in this channel",
         in_thread="Optional: Search only in this thread",
+        from_user="Optional: Filter messages from this user",
+        mentions="Optional: Filter messages that mention this user",
         from_date="Optional: Start date (YYYY-MM-DD)",
         to_date="Optional: End date (YYYY-MM-DD)",
         min_length="Optional: Minimum message length in characters",
@@ -1862,12 +1889,14 @@ def setup_commands(bot):
         query: str,
         in_channel: discord.TextChannel = None,
         in_thread: discord.Thread = None,
+        from_user: discord.User = None,
+        mentions: discord.User = None,
         from_date: str = None,
         to_date: str = None,
         min_length: int = None,
         server_name: str = None
     ):
-        await commands.ask_command(interaction, query, in_channel, in_thread, from_date, to_date, min_length, server_name)
+        await commands.ask_command(interaction, query, in_channel, in_thread, from_user, mentions, from_date, to_date, min_length, server_name)
     
     async def recap_server_autocomplete(
         interaction: discord.Interaction,

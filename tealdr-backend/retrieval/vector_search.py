@@ -12,7 +12,7 @@ CONFIDENCE_THRESHOLD = 0.35
 
 async def vector_search(query: str, server_id: int, author_id: int = None,
                         channel_id: int = None, time_range: tuple = None, 
-                        intent: str = None) -> list[dict]:
+                        intent: str = None, mentions_user_id: int = None) -> list[dict]:
     """
     Run pgvector semantic search against existing Supabase messages table.
     Reuses the existing embedding + supabase infrastructure.
@@ -62,6 +62,7 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             author_id=author_id,
             channel_id=channel_id,
             time_range=time_range if time_range else None,  # Don't default to 3 days for lookup
+            mentions_user_id=mentions_user_id,
             limit=Config.VECTOR_TOP_K,
         )
 

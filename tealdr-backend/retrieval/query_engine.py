@@ -23,7 +23,7 @@ Query: "{query}"
 
 Return:
 {{
-  "intent": "lookup | relational | evolutionary | expert_finding | summarization | temporal_context | conversation_threads",
+  "intent": "lookup | relational | evolutionary | expert_finding | summarization | temporal_context | conversation_threads | user_messages",
   "primary_entity": "main entity (lowercase)",
   "primary_entity_type": "person | topic | technology | null",
   "search_terms": ["keywords"],
@@ -32,9 +32,10 @@ Return:
 }}
 
 Intent guide (choose the MOST SPECIFIC intent):
+- "what did @user say" / "what is @user trying to convey" / "@user's messages" / "messages from @user" → user_messages (find messages FROM a specific user)
 - "who talked about X" / "who mentioned X" / "who was discussing X" → lookup (find messages about X)
 - "who knows X" / "who is expert in X" → expert_finding  
-- "what did X say about Y" → lookup (X is person, Y is topic)
+- "what did X say about Y" → user_messages (X is person, Y is topic - filter by user AND topic)
 - "how are X and Y related" → relational
 - "tell me about X" / "what is X" / "explain X" → lookup
 - "what happened with X over time" / "how did X evolve" → temporal_context
@@ -42,9 +43,11 @@ Intent guide (choose the MOST SPECIFIC intent):
 - "what did i miss" / "what happened" / "server activity" / "recent activity" (NO specific entity) → summarization 
 
 IMPORTANT: 
+- If query asks about messages FROM a specific user (e.g., "what @user said", "@user's messages"), use "user_messages" intent
 - If query asks about a SPECIFIC topic/person/thing, use "lookup" NOT "summarization"
 - Only use "summarization" for general server activity with NO specific entity
 - Extract the actual entity name from the query (e.g., "geopolitics" from "who talked about geopolitics")
+- For user mentions like @username or <@123456>, extract the username as the entity and set type to "person"
 
 Temporal context indicators:
 - "context", "background", "what happened before", "continuation", "follow-up"
@@ -226,6 +229,7 @@ async def run_query_pipeline(
     channel_id: Optional[int] = None,
     time_range: Optional[tuple] = None,
     author_username: Optional[str] = None,
+    mentions_user_id: Optional[int] = None,
 ) -> dict:
     """
     Full 5-step Graph RAG query pipeline.
@@ -261,6 +265,38 @@ async def run_query_pipeline(
             time_range=time_range,
         )
 
+    # Step 2 — Handle user_messages intent (messages FROM a specific user)
+    if intent == "user_messages":
+        # For user-specific queries, we ONLY want messages from that user
+        # Skip graph traversal and rely entirely on vector search with author filter
+        logger.info(f"User messages query detected - filtering by author_id: {author_id}")
+        
+        # Use the original query for semantic search
+        search_query = query
+        
+        vector_results = await vector_search(
+            query=search_query,
+            server_id=server_id,
+            author_id=author_id,  # CRITICAL: Filter by author
+            channel_id=channel_id,
+            time_range=time_range,
+            intent="lookup",  # Use lookup intent for semantic search
+            mentions_user_id=mentions_user_id,
+        )
+        
+        # No graph traversal for user_messages - we only want messages FROM the user
+        graph_results = []
+        
+        # Context is just the vector results (all from the specified user)
+        context = vector_results
+        
+        return {
+            "understanding": understanding,
+            "context": context,
+            "graph_results": graph_results,
+            "vector_results": vector_results,
+        }
+    
     # Step 2 — Standard Graph traversal (for non-temporal queries)
     graph_results = await graph_traversal(intent, understanding, server_id, time_range)
 
@@ -280,6 +316,7 @@ async def run_query_pipeline(
         channel_id=channel_id,
         time_range=time_range,
         intent=intent,  # Pass intent to prioritize recency for summarization queries
+        mentions_user_id=mentions_user_id,
     )
 
     # Step 4 — Context assembly

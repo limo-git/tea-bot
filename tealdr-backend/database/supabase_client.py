@@ -178,7 +178,7 @@ class SupabaseClient:
             # Fallback to vector search only
             return await self.semantic_search(embedding, server_id, limit)
     
-    async def semantic_search_filtered(self, embedding, server_id, author_id=None, time_range=None, channel_id=None, thread_id=None, limit=20):
+    async def semantic_search_filtered(self, embedding, server_id, author_id=None, time_range=None, channel_id=None, thread_id=None, mentions_user_id=None, limit=20):
         try:
             # Select messages without channel join (no foreign key relationship exists)
             query = self.client.table('messages').select('*').eq('server_id', server_id)
@@ -201,6 +201,18 @@ class SupabaseClient:
             
             # Order by created_at DESC to get most recent messages first
             messages = query.order('created_at', desc=True).limit(200).execute().data
+            
+            # Filter messages that mention a specific user (post-query filtering)
+            if mentions_user_id:
+                mention_patterns = [
+                    f"<@{mentions_user_id}>",  # Standard mention
+                    f"<@!{mentions_user_id}>",  # Nickname mention
+                ]
+                messages = [
+                    msg for msg in messages 
+                    if any(pattern in msg.get('content', '') for pattern in mention_patterns)
+                ]
+                logger.info(f"Filtered to {len(messages)} messages mentioning user {mentions_user_id}")
             
             if not messages:
                 return []
