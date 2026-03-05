@@ -272,6 +272,7 @@ async def run_query_pipeline(
         logger.info(f"User messages query detected - filtering by author_id: {author_id}")
         
         # Use the original query for semantic search
+        # For user queries, use a more generic search to avoid low similarity scores
         search_query = query
         
         vector_results = await vector_search(
@@ -280,7 +281,7 @@ async def run_query_pipeline(
             author_id=author_id,  # CRITICAL: Filter by author
             channel_id=channel_id,
             time_range=time_range,
-            intent="lookup",  # Use lookup intent for semantic search
+            intent="user_messages",  # Use user_messages intent to skip confidence threshold
             mentions_user_id=mentions_user_id,
         )
         

@@ -44,6 +44,13 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
             logger.info(f"Fetched {len(results)} recent messages for summarization")
             return results
         
+        # For user_messages queries, skip confidence filtering (already filtered by author)
+        if intent == "user_messages":
+            logger.info(f"User messages query - will skip confidence threshold filtering")
+            skip_confidence_filter = True
+        else:
+            skip_confidence_filter = False
+        
         # For all other query types (lookup, expert_finding, etc.), use semantic search
         # For lookup queries, search the ENTIRE database semantically (no time filter by default)
         # This allows finding relevant messages from any time period
@@ -67,6 +74,11 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
         )
 
         logger.info(f"Vector search returned {len(results)} results before confidence filtering")
+        
+        # Skip confidence filtering for user_messages queries (already filtered by author)
+        if skip_confidence_filter:
+            logger.info(f"Skipping confidence threshold for user_messages query - returning all {len(results)} results")
+            return results
         
         # Apply confidence threshold - filter out low-relevance results
         filtered_results = [msg for msg in results if msg.get('similarity', 0) >= CONFIDENCE_THRESHOLD]

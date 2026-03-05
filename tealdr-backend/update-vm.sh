@@ -32,26 +32,35 @@ echo ""
 
 echo "Step 2: Connecting to VM and updating..."
 
-# SSH command to pull, rebuild, and restart
+# SSH command to pull and restart
 gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --command="
-cd tea-bot/tealdr-backend && \
+cd ~/tea-bot/tealdr-backend && \
+echo '==> Current commit:' && \
+git log --oneline -1 && \
+echo '' && \
 echo '==> Pulling latest code from GitHub...' && \
 git pull origin main && \
-echo '==> Stopping current bot...' && \
-sudo docker stop tealdr-bot && \
-sudo docker rm tealdr-bot && \
-echo '==> Rebuilding Docker image...' && \
-sudo docker build -t tealdr-bot . && \
-echo '==> Starting bot with new code...' && \
-sudo docker run -d \
-    --name tealdr-bot \
-    --restart unless-stopped \
-    --env-file .env \
-    tealdr-bot && \
-echo '==> Deployment complete!' && \
 echo '' && \
-echo 'Bot logs (last 20 lines):' && \
-sudo docker logs --tail 20 tealdr-bot
+echo '==> New commit:' && \
+git log --oneline -1 && \
+echo '' && \
+echo '==> Finding Docker container...' && \
+CONTAINER_ID=\$(sudo docker ps -q --filter name=tealdr) && \
+if [ -z \"\$CONTAINER_ID\" ]; then \
+    echo '[ERROR] No tealdr container found!' && \
+    sudo docker ps -a && \
+    exit 1; \
+fi && \
+echo \"Found container: \$CONTAINER_ID\" && \
+echo '' && \
+echo '==> Restarting bot...' && \
+sudo docker restart \$CONTAINER_ID && \
+echo '' && \
+echo '==> Waiting for bot to start...' && \
+sleep 3 && \
+echo '' && \
+echo '==> Bot logs (last 30 lines):' && \
+sudo docker logs --tail 30 \$CONTAINER_ID
 "
 
 echo ""
