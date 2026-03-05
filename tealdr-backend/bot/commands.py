@@ -851,74 +851,23 @@ Recap:"""
                 await interaction.followup.send(embed=embed)
                 return
             
-            # Format results as exact message list
-            embed = discord.Embed(
-                title="🔍 Lookup Results",
-                description=f"Found {len(messages)} relevant message(s) matching: \"{clues}\"\n*Showing messages with >50% relevance*",
-                color=discord.Color.blue()
+            # Use pagination view for results
+            from utils.lookup_pagination import LookupPaginationView
+            
+            view = LookupPaginationView(
+                messages=messages,
+                clues=clues,
+                guild=guild,
+                user=interaction.user,
+                items_per_page=10
             )
             
-            # Add up to 10 messages
-            for i, msg in enumerate(messages[:10], 1):
-                author_name = msg.get("author_name") or msg.get("author", "Unknown")
-                content = msg.get("content", "")
-                timestamp = msg.get("created_at") or msg.get("timestamp", "")
-                
-                # Get channel name
-                channel_id = msg.get("channel_id")
-                channel_name = None
-                if channel_id:
-                    try:
-                        channel = guild.get_channel(int(channel_id))
-                        if channel:
-                            channel_name = f"#{channel.name}"
-                    except:
-                        pass
-                if not channel_name:
-                    channel_name = msg.get("channel", "")
-                    if channel_name and not channel_name.startswith("#"):
-                        channel_name = f"#{channel_name}"
-                
-                # Format timestamp with Discord timestamp for automatic timezone conversion
-                if timestamp:
-                    try:
-                        from datetime import datetime
-                        if isinstance(timestamp, str):
-                            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                        else:
-                            dt = timestamp
-                        
-                        # Use Discord timestamp format for automatic user timezone conversion
-                        unix_timestamp = int(dt.timestamp())
-                        date_str = f"<t:{unix_timestamp}:f>"  # Discord auto-converts to user's local time
-                    except:
-                        date_str = str(timestamp)[:19]
-                else:
-                    date_str = "Unknown date"
-                
-                # Truncate long messages
-                display_content = content
-                if len(content) > 200:
-                    display_content = content[:200] + "..."
-                
-                # Format field
-                field_name = f"{i}. {author_name}"
-                if channel_name:
-                    field_value = f"**When:** {date_str}\n**Where:** {channel_name}\n**Said:** \"{display_content}\""
-                else:
-                    field_value = f"**When:** {date_str}\n**Said:** \"{display_content}\""
-                
-                embed.add_field(
-                    name=field_name,
-                    value=field_value,
-                    inline=False
-                )
+            # Send initial embed with pagination
+            initial_embed = view.create_results_embed()
+            sent_message = await interaction.followup.send(embed=initial_embed, view=view)
+            view.message = sent_message
             
-            if len(messages) > 10:
-                embed.set_footer(text=f"Showing 10 of {len(messages)} results")
-            
-            await interaction.followup.send(embed=embed)
-            logger.info(f"Lookup returned {len(messages)} results for {interaction.user}")
+            logger.info(f"Lookup returned {len(messages)} results for {interaction.user} with pagination")
         
         except Exception as e:
             logger.error(f"Error in lookup command: {e}", exc_info=True)
