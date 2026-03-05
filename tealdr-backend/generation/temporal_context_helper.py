@@ -52,7 +52,7 @@ def _generate_temporal_context_info(pipeline_result: dict, context_items: List[d
                 if gap_key not in time_gaps:
                     time_gaps[gap_key] = []
                 time_gaps[gap_key].append({
-                    "author": item.get("author", "Unknown"),
+                    "author": item.get("author_name") or item.get("author", "Unknown"),
                     "content_preview": item.get("content", "")[:50] + "...",
                     "entity": tc.get("related_to_entity", "")
                 })
@@ -99,7 +99,7 @@ def format_context_for_prompt(context_items: List[dict]) -> str:
     for i, item in enumerate(context_items, 1):
         source = item.get("source", "unknown")
         content = item.get("content", "").strip()
-        author = item.get("author", "Unknown")
+        author = item.get("author_name") or item.get("author", "Unknown")
         channel = item.get("channel", "")
         timestamp = item.get("timestamp", "")
         
