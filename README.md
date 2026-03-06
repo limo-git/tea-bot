@@ -15,7 +15,11 @@ TeaL;DR is a Discord bot that helps you search through your server's message his
 
 
 
-https://github.com/user-attachments/assets/278b55e1-b18c-4ee2-8751-12a4350052e9
+
+
+https://github.com/user-attachments/assets/6dd63aa6-e85f-4ef5-9447-2580558536cd
+
+
 
 
 
