@@ -752,6 +752,152 @@ Recap:"""
             logger.error(f"Error in customize command: {e}")
             await interaction.followup.send("An error occurred while customizing the bot.", ephemeral=True)
     
+    async def private_session_command(
+        self,
+        interaction: discord.Interaction,
+        action: str,
+        channel: discord.TextChannel = None,
+        duration: int = None
+    ):
+        """Manage private sessions to temporarily disable message indexing."""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            from utils.private_sessions import private_session_manager
+            
+            if action == "start":
+                if not channel:
+                    await interaction.followup.send(
+                        "❌ Please specify a channel to start a private session.",
+                        ephemeral=True
+                    )
+                    return
+                
+                if not duration or duration <= 0:
+                    await interaction.followup.send(
+                        "❌ Please specify a valid duration in minutes (e.g., 30, 60, 120).",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Check if channel already has an active session
+                if private_session_manager.is_channel_private(channel.id):
+                    existing_info = private_session_manager.get_session_info(channel.id)
+                    time_remaining = private_session_manager.get_time_remaining(channel.id)
+                    
+                    await interaction.followup.send(
+                        f"⚠️ **Channel {channel.mention} already has an active private session!**\n\n"
+                        f"Time remaining: {int(time_remaining.total_seconds() / 60)} minutes\n"
+                        f"Started by: <@{existing_info['started_by']}>\n\n"
+                        f"Use `/private_session action:Stop` to end it first.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Start the session
+                end_time = private_session_manager.start_session(
+                    channel_id=channel.id,
+                    server_id=interaction.guild.id,
+                    duration_minutes=duration,
+                    started_by=interaction.user.id
+                )
+                
+                # Format end time
+                unix_timestamp = int(end_time.timestamp())
+                
+                await interaction.followup.send(
+                    f"✅ **Private session started for {channel.mention}**\n\n"
+                    f"🔒 Message indexing is now **disabled** for this channel\n"
+                    f"⏱️ Duration: {duration} minutes\n"
+                    f"🕐 Ends at: <t:{unix_timestamp}:F> (<t:{unix_timestamp}:R>)\n\n"
+                    f"Messages sent in this channel will not be indexed until the session ends.\n"
+                    f"Use `/private_session action:Stop channel:{channel.name}` to end it early.",
+                    ephemeral=True
+                )
+                
+                logger.info(f"Private session started for channel {channel.id} ({channel.name}) by {interaction.user} for {duration} minutes")
+            
+            elif action == "stop":
+                if not channel:
+                    await interaction.followup.send(
+                        "❌ Please specify which channel's private session to stop.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Check if channel has an active session
+                if not private_session_manager.is_channel_private(channel.id):
+                    await interaction.followup.send(
+                        f"ℹ️ Channel {channel.mention} does not have an active private session.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Get session info before stopping
+                session_info = private_session_manager.get_session_info(channel.id)
+                
+                # Stop the session
+                private_session_manager.stop_session(channel.id)
+                
+                await interaction.followup.send(
+                    f"✅ **Private session stopped for {channel.mention}**\n\n"
+                    f"🔓 Message indexing is now **enabled** again\n"
+                    f"Started by: <@{session_info['started_by']}>\n\n"
+                    f"New messages in this channel will be indexed normally.",
+                    ephemeral=True
+                )
+                
+                logger.info(f"Private session stopped for channel {channel.id} ({channel.name}) by {interaction.user}")
+            
+            elif action == "list":
+                # Get all active sessions for this server
+                active_sessions = private_session_manager.get_all_active_sessions(interaction.guild.id)
+                
+                if not active_sessions:
+                    await interaction.followup.send(
+                        "ℹ️ **No active private sessions**\n\n"
+                        f"There are currently no private sessions in {interaction.guild.name}.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Build list of active sessions
+                embed = discord.Embed(
+                    title="🔒 Active Private Sessions",
+                    description=f"Private sessions in {interaction.guild.name}",
+                    color=discord.Color.purple()
+                )
+                
+                for channel_id, session_info in active_sessions.items():
+                    channel_obj = interaction.guild.get_channel(channel_id)
+                    channel_name = channel_obj.mention if channel_obj else f"Unknown Channel ({channel_id})"
+                    
+                    time_remaining = private_session_manager.get_time_remaining(channel_id)
+                    minutes_remaining = int(time_remaining.total_seconds() / 60)
+                    
+                    unix_timestamp = int(session_info['end_time'].timestamp())
+                    
+                    embed.add_field(
+                        name=f"📍 {channel_name}",
+                        value=(
+                            f"⏱️ Time remaining: {minutes_remaining} minutes\n"
+                            f"🕐 Ends: <t:{unix_timestamp}:R>\n"
+                            f"👤 Started by: <@{session_info['started_by']}>"
+                        ),
+                        inline=False
+                    )
+                
+                embed.set_footer(text=f"Total: {len(active_sessions)} active session(s)")
+                
+                await interaction.followup.send(embed=embed, ephemeral=True)
+        
+        except Exception as e:
+            logger.error(f"Error in private_session command: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ An error occurred while managing private sessions.",
+                ephemeral=True
+            )
+    
     async def lookup_command(
         self,
         interaction: discord.Interaction,
@@ -1972,6 +2118,26 @@ def setup_commands(bot):
         persona: str = None
     ):
         await commands.customize_command(interaction, action, persona)
+
+    @bot.tree.command(name="private_session", description="Manage private sessions to disable message indexing (Admin only)")
+    @app_commands.describe(
+        action="Action to perform",
+        channel="Channel to apply the private session to",
+        duration="Duration in minutes (for start action)"
+    )
+    @app_commands.choices(action=[
+        app_commands.Choice(name="Start Private Session", value="start"),
+        app_commands.Choice(name="Stop Private Session", value="stop"),
+        app_commands.Choice(name="List Active Sessions", value="list")
+    ])
+    @admin_only()
+    async def private_session(
+        interaction: discord.Interaction,
+        action: str,
+        channel: discord.TextChannel = None,
+        duration: int = None
+    ):
+        await commands.private_session_command(interaction, action, channel, duration)
 
     @bot.tree.command(name="clear", description="Clear your conversation context with the bot")
     async def clear(interaction: discord.Interaction):

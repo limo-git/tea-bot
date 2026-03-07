@@ -68,6 +68,12 @@ class BotEvents:
             logger.debug(f"Skipping message from excluded channel {message.channel.id} in server {message.guild.id}")
             return
         
+        # Check if channel is in a private session
+        from utils.private_sessions import private_session_manager
+        if private_session_manager.is_channel_private(message.channel.id):
+            logger.info(f"Skipping message from private session channel {message.channel.id} in server {message.guild.id}")
+            return
+        
         if not message.content or message.content.strip() == "":
             logger.debug(f"Skipping empty message {message.id}")
             return
