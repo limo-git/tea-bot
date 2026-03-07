@@ -87,11 +87,18 @@ class AskPaginationView(View):
     
     def update_buttons(self):
         """Update button enabled/disabled states."""
+        # Calculate max pages based on current view
+        if self.showing_sources:
+            # For sources, calculate max pages based on 10 sources per page
+            max_pages = max(1, (len(self.context_items) + 9) // 10)
+        else:
+            max_pages = self.total_pages
+        
         # Previous button (index 0)
         self.children[0].disabled = self.current_page == 0
         
         # Next button (index 1)
-        self.children[1].disabled = self.current_page >= self.total_pages - 1
+        self.children[1].disabled = self.current_page >= max_pages - 1
         
         # Sources button (index 2) - update label based on state
         if self.showing_sources:
