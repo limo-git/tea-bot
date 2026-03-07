@@ -309,44 +309,30 @@ class BotCommands:
                 entities=entities  # P3: Entity tracking
             )
             
-            # Create rich embed(s) for response
-            embeds = embed_builder.create_paginated_embeds(
-                response=response,
-                query=query,
+            # Use pagination view with buttons instead of reactions
+            from utils.ask_pagination import AskPaginationView
+            
+            view = AskPaginationView(
+                answer=response,
+                context_items=messages,
                 user=interaction.user,
-                base_color=discord.Color.blue()
+                guild=guild,
+                query=query,
+                chars_per_page=1800
             )
             
-            # Add context indicator to first embed if follow-up
-            if has_context and embeds:
-                embeds[0].insert_field_at(
+            # Add context indicator if follow-up
+            initial_embed = view.create_answer_embed()
+            if has_context and context_relevance > 0.3:
+                initial_embed.insert_field_at(
                     0,
                     name="💬 Context",
                     value="Following up from previous conversation",
                     inline=False
                 )
             
-            # Store sources data for later reveal (don't show by default)
-            sources_data = None
-            if len(messages) > 0:
-                sources_data = self._format_sources(messages, guild)
-            
-            # Send with pagination if multiple embeds
-            if len(embeds) > 1:
-                view = PaginationView(embeds, interaction.user)
-                sent_message = await interaction.followup.send(embed=embeds[0], view=view)
-                view.message = sent_message
-            else:
-                sent_message = await interaction.followup.send(embed=embeds[0])
-            
-            # Track this response for feedback and sources
-            self.bot.events.track_response(sent_message.id, query, response, sources_data)
-            
-            # Add reaction options for feedback and sources
-            await sent_message.add_reaction('👍')
-            await sent_message.add_reaction('👎')
-            if sources_data:
-                await sent_message.add_reaction('📊')  # React with 📊 to view sources
+            sent_message = await interaction.followup.send(embed=initial_embed, view=view)
+            view.message = sent_message
             
             logger.info(f"Sent response to {interaction.user}")
         
