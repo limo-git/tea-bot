@@ -13,6 +13,10 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
+# Minimum thresholds for summarization to save compute and API calls
+MIN_MESSAGES_FOR_SUMMARY = 5
+MIN_CHARACTERS_FOR_SUMMARY = 150
+
 # Summarization prompt for hourly channel summaries
 HOURLY_SUMMARY_PROMPT = """You are summarizing Discord channel activity for the past hour.
 
@@ -64,18 +68,45 @@ async def summarize_channel_hour(server_id: int, channel_id: int, hour_bucket: d
             limit=500
         )
         
-        if not messages or len(messages) < 3:
-            logger.info(f"Skipping summary for channel {channel_id} - only {len(messages)} messages")
+        if not messages:
+            logger.info(f"Skipping summary for channel {channel_id} - 0 messages")
             return None
         
         # Format messages for summarization
+        total_characters = 0
         message_texts = []
         active_users = set()
         for msg in messages:
             author = msg.get('author_name', 'Unknown')
             content = msg.get('content', '')
+            total_characters += len(content)
             active_users.add(msg.get('author_id'))
             message_texts.append(f"{author}: {content}")
+            
+        # Check information density before calling LLM
+        if len(messages) < MIN_MESSAGES_FOR_SUMMARY or total_characters < MIN_CHARACTERS_FOR_SUMMARY:
+            logger.info(f"Skipping summary for channel {channel_id} - low information density ({len(messages)} msgs, {total_characters} chars)")
+            
+            summary_text = "Minimal chat activity."
+            key_topics = ["casual chat"]
+            
+            await supabase_client.store_channel_summary(
+                server_id=server_id,
+                channel_id=channel_id,
+                hour_bucket=hour_bucket,
+                summary_text=summary_text,
+                message_count=len(messages),
+                key_topics=key_topics,
+                active_users=list(active_users)
+            )
+            return {
+                'server_id': server_id,
+                'channel_id': channel_id,
+                'hour_bucket': hour_bucket,
+                'message_count': len(messages),
+                'summary': summary_text,
+                'topics': key_topics
+            }
         
         messages_str = "\n".join(message_texts[:100])  # Limit to 100 messages for context
         
