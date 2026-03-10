@@ -14,9 +14,15 @@ logger = get_logger(__name__)
 
 
 async def _init_graph_rag(bot):
-    """Initialize Neo4j schema and start Graph RAG background jobs."""
+    """
+    Initialize Neo4j schema and start Graph RAG background jobs.
+    Designed to be idempotent and tolerant of schema/job failures.
+    If any critical step fails, disables Graph RAG and logs the error,
+    allowing the bot to continue operating with degraded functionality.
+    """
     try:
         from graph.schema import setup_schema
+
         await setup_schema()
         logger.info("Neo4j schema initialized")
     except Exception as e:
@@ -28,6 +34,7 @@ async def _init_graph_rag(bot):
         from jobs.chunker_job import start_chunker_job
         from jobs.decay_job import start_decay_job
         from jobs.summary_job import start_summary_job
+
         start_chunker_job(bot)
         start_decay_job(bot)
         start_summary_job(bot)
@@ -37,14 +44,26 @@ async def _init_graph_rag(bot):
 
 
 def main():
+    """
+    Bot entry point. Validates config, sets Discord intents, registers handlers,
+    and starts the bot. Handles both startup errors (config, login) and runtime
+    shutdown (signals) gracefully.
+    """
     try:
         Config.validate()
         logger.info("Configuration validated successfully")
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
-        logger.error("Please check your .env file and ensure all required variables are set")
+        logger.error(
+            "Please check your .env file and ensure all required variables are set"
+        )
         sys.exit(1)
 
+    """
+    Discord intents restrict which events the bot receives. message_content intent
+    is required to read message text in message_create events (privileged intent).
+    guilds/members/presences needed for full user tracking in Graph RAG.
+    """
     intents = discord.Intents.default()
     intents.message_content = True
     intents.guilds = True
@@ -66,7 +85,12 @@ def main():
         else:
             logger.info("Graph RAG disabled — using Gemini + pgvector only")
 
-    # Hook Graph RAG init into the existing on_ready via setup_hook
+    """
+    Hook Graph RAG init into Discord's on_ready lifecycle. setup_hook is called
+    once when the bot connects; we wrap it to inject Graph RAG init without
+    interfering with existing setup logic. Using create_task ensures Graph RAG
+    init happens asynchronously without blocking bot readiness.
+    """
     original_setup_hook = bot.setup_hook
 
     async def setup_hook():
@@ -76,6 +100,13 @@ def main():
             bot.loop.create_task(_init_graph_rag(bot))
 
     bot.setup_hook = setup_hook
+
+    """
+    Register signal handlers for graceful shutdown on SIGINT (Ctrl+C) or
+    SIGTERM (systemd/Docker). asyncio.create_task ensures bot.close() runs
+    on the event loop, avoiding deadlock from mixing sync signal handler
+    with async bot lifecycle.
+    """
 
     def signal_handler(sig, frame):
         logger.info("Received shutdown signal, closing bot...")
@@ -95,6 +126,7 @@ def main():
         sys.exit(1)
     finally:
         logger.info("Bot shutdown complete")
+
 
 if __name__ == "__main__":
     main()
