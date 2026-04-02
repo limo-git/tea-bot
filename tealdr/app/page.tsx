@@ -139,27 +139,27 @@ export default function Home() {
         <div className="absolute inset-0 z-10 bg-gradient-to-b from-[#0a0a0a]/80 via-[#0a0a0a]/60 to-[#0a0a0a]" />
         
         {/* Hero Content */}
-        <div className="relative z-20 h-full flex items-center justify-center px-6">
-          <div className="max-w-7xl mx-auto text-center">
-            <div className="mb-8">
-              <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight" style={{ letterSpacing: '-0.02em' }}>
-                CTRL+F
-                <br />
-                <span className="text-[#5865F2]">FOR YOUR DISCORD SERVER</span>
-              </h1>
-              <p className="text-xl md:text-2xl text-[#c0c0c0] mb-12 max-w-3xl mx-auto leading-relaxed">
+        <div className="relative z-20 h-full flex items-center justify-center px-4 sm:px-6">
+          <div className="max-w-7xl mx-auto text-center w-full">
+            <div className="mb-6 sm:mb-8">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black mb-4 sm:mb-6 leading-tight px-2" style={{ letterSpacing: '-0.02em' }}>
                 You know the conversation happened.
                 <br />
-                <span>You just can't find it.</span>
+                <span className="text-[#5865F2]">You just can't find it.</span>
+              </h1>
+              <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[#c0c0c0] mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed px-2">
+                TeaL;DR is the Discord bot I built because I was tired of scrolling.
+                <br className="hidden sm:block" />
+                <span className="sm:inline block mt-1 sm:mt-0">Ask it anything about your server — it actually finds it.</span>
               </p>
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center px-4">
               <a
                 href="https://discord.com/api/oauth2/authorize?client_id=1466768259369013333&permissions=274877959168&scope=bot%20applications.commands"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-10 py-4 bg-[#5865F2] text-white font-bold text-lg border-2 border-[#5865F2] transition-all duration-200 hover:scale-105"
+                className="w-full sm:w-auto px-8 sm:px-10 py-3 sm:py-4 bg-[#5865F2] text-white font-bold text-base sm:text-lg border-2 border-[#5865F2] transition-all duration-200 hover:scale-105"
                 onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 40px rgba(88, 101, 242, 0.6)'}
                 onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
               >
@@ -167,25 +167,25 @@ export default function Home() {
               </a>
               <Link
                 href="/docs"
-                className="px-10 py-4 border-2 border-[#5865F2] text-[#5865F2] font-bold text-lg hover:bg-[#5865F2] hover:text-white transition-all duration-200"
+                className="w-full sm:w-auto px-8 sm:px-10 py-3 sm:py-4 border-2 border-[#5865F2] text-[#5865F2] font-bold text-base sm:text-lg hover:bg-[#5865F2] hover:text-white transition-all duration-200"
               >
                 VIEW DOCS
               </Link>
             </div>
             
             {/* Stats */}
-            <div className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
+            <div className="mt-8 sm:mt-12 md:mt-16 grid grid-cols-3 gap-3 sm:gap-6 md:gap-8 max-w-2xl mx-auto px-4">
               <div className="text-center">
-                <div className="text-4xl font-black text-[#5865F2] mb-2">7</div>
-                <div className="text-sm text-[#a0a0a0]">Retrieval Pipelines</div>
+                <div className="text-2xl sm:text-3xl md:text-4xl font-black text-[#5865F2] mb-1 sm:mb-2">7</div>
+                <div className="text-xs sm:text-sm text-[#a0a0a0] leading-tight">Retrieval Pipelines</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-black text-[#5865F2] mb-2">Hybrid</div>
-                <div className="text-sm text-[#a0a0a0]">BM25 + Vectors</div>
+                <div className="text-2xl sm:text-3xl md:text-4xl font-black text-[#5865F2] mb-1 sm:mb-2">Hybrid</div>
+                <div className="text-xs sm:text-sm text-[#a0a0a0] leading-tight">BM25 + Vectors</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-black text-[#5865F2] mb-2">0</div>
-                <div className="text-sm text-[#a0a0a0]">Hallucinations</div>
+                <div className="text-2xl sm:text-3xl md:text-4xl font-black text-[#5865F2] mb-1 sm:mb-2">0</div>
+                <div className="text-xs sm:text-sm text-[#a0a0a0] leading-tight">Hallucinations</div>
               </div>
             </div>
           </div>
