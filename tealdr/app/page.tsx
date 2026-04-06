@@ -148,9 +148,8 @@ export default function Home() {
                 <span className="text-[#5865F2]">You just can't find it.</span>
               </h1>
               <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-[#c0c0c0] mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed px-2">
-                TeaL;DR is the Discord bot I built because I was tired of scrolling.
+                Ctrl + F for your Discord server
                 <br className="hidden sm:block" />
-                <span className="sm:inline block mt-1 sm:mt-0">Ask it anything about your server — it actually finds it.</span>
               </p>
             </div>
             
@@ -220,7 +219,7 @@ export default function Home() {
       </section>
 
       {/* THE SOLUTION - TECHNICAL DEEP DIVE */}
-      <section className="py-20 px-6 bg-[#1a1a1a]">
+      {/* <section className="py-20 px-6 bg-[#1a1a1a]">
         <div className="max-w-4xl mx-auto">
           <div className="mb-12">
             <h2 className="text-4xl md:text-5xl font-black mb-6">
@@ -256,7 +255,7 @@ export default function Home() {
             </p>
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* KEY COMMANDS */}
       <section className="py-20 px-6 bg-[#0a0a0a]">
@@ -339,15 +338,54 @@ export default function Home() {
               </div>
               
               <div className="pt-4 border-t border-[#5865F2]/30">
-                <span className="text-[#a0a0a0]">Built with:</span> Supabase • Neo4j • Discord.py • Gemini
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* REALISTIC DEMO */}
-    
+      {/* VIDEO DEMO SECTION */}
+      <section className="py-20 px-6 bg-[#0a0a0a]">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-12">
+            <p className="text-[#5865F2] text-sm mb-2">// SEE IT IN ACTION</p>
+            <h2 className="text-4xl md:text-5xl font-black mb-6">
+              Watch How It Works
+            </h2>
+            <p className="text-lg text-[#c0c0c0]">
+              Real demonstration of TeaL;DR in action — searching, finding, and delivering results instantly.
+            </p>
+          </div>
+
+          <div className="relative bg-[#1a1a1a] border-2 border-[#5865F2]/30 p-4 sm:p-6 md:p-8">
+            <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-[#0a0a0a]">
+              <video
+                className="w-full h-full object-contain"
+                controls
+                preload="metadata"
+              >
+                <source src="/work10.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            
+            <div className="mt-6 grid sm:grid-cols-3 gap-4 text-center">
+              <div className="bg-[#0a0a0a] border border-[#5865F2]/20 p-4">
+                <div className="text-[#5865F2] font-bold mb-1">Natural Language</div>
+                <div className="text-xs text-[#a0a0a0]">Ask questions like you would to a human</div>
+              </div>
+              <div className="bg-[#0a0a0a] border border-[#5865F2]/20 p-4">
+                <div className="text-[#5865F2] font-bold mb-1">Instant Results</div>
+                <div className="text-xs text-[#a0a0a0]">Get answers in milliseconds</div>
+              </div>
+              <div className="bg-[#0a0a0a] border border-[#5865F2]/20 p-4">
+                <div className="text-[#5865F2] font-bold mb-1">Source Citations</div>
+                <div className="text-xs text-[#a0a0a0]">Every answer backed by actual messages</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* REMOVED OLD NEW FEATURES SHOWCASE */}
       <section className="py-20 px-6 bg-[#1a1a1a] hidden">
