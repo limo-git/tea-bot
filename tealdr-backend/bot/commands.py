@@ -203,7 +203,17 @@ class BotCommands:
                     logger.info(f"Filtering by from_user parameter: {mentioned_user}")
             else:
                 # Fall back to extracting from query
+                import re
+                user_mention_in_query = re.search(r'<@!?(\d+)>', query)
+                if user_mention_in_query:
+                    logger.info(f"Found user mention in query: {user_mention_in_query.group(0)}")
+                
                 mentioned_user = extract_user_mention(query, guild)
+                
+                if mentioned_user:
+                    logger.info(f"Extracted user from query: {mentioned_user}")
+                else:
+                    logger.info(f"Could not extract user from query, checking context")
                 
                 # If no user mentioned but we have context, use last mentioned user
                 if not mentioned_user and has_context:
