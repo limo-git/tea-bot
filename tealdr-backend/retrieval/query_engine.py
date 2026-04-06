@@ -131,15 +131,31 @@ async def understand_query(query: str) -> dict:
     except (json.JSONDecodeError, Exception) as e:
         logger.error(f"Query understanding failed: {e}")
         # Fallback for failed query understanding
-        fallback_entity = "server"  # Default to server for general queries
         query_lower = query.lower()
-        if any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+        
+        # Check if this is a user-specific query (mentions or "what is @user doing")
+        import re
+        has_user_mention = bool(re.search(r'<@!?\d+>|@\w+', query))
+        is_user_query = any(phrase in query_lower for phrase in ["what is", "what's", "what do", "what does", "know about", "upto", "up to", "doing", "said", "messages from", "tell me about"])
+        
+        if has_user_mention and is_user_query:
+            # User-specific query - use lookup intent to search entire history
+            fallback_intent = "user_messages"
+            fallback_entity = query
+            logger.info(f"Fallback: Detected user-specific query, using user_messages intent")
+        elif any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+            # General server activity query
+            fallback_intent = "summarization"
             fallback_entity = "server"
+            logger.info(f"Fallback: Detected general server activity query")
         else:
-            fallback_entity = query  # Use the query itself as entity
+            # Default to lookup for specific queries
+            fallback_intent = "lookup"
+            fallback_entity = query
+            logger.info(f"Fallback: Using lookup intent for specific query")
             
         return {
-            "intent": "summarization",
+            "intent": fallback_intent,
             "primary_entity": fallback_entity,
             "primary_entity_type": None,
             "secondary_entity": None,

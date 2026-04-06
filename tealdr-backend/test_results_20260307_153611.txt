@@ -1,0 +1,188 @@
+================================================================================
+TealDR Bot - Comprehensive RAG Pipeline Test Report
+================================================================================
+Generated: 2026-03-07 15:36:11 UTC
+Server ID: 1131555356418523180
+Total Execution Time: 136.39s
+
+SUMMARY
+--------------------------------------------------------------------------------
+Total Tests: 15
+✅ Passed: 14 (93.3%)
+❌ Failed: 1 (6.7%)
+⚠️  Errors: 0 (0.0%)
+🔴 Critical Failures: 1
+
+
+Naive Vector Pipeline
+--------------------------------------------------------------------------------
+Pass Rate: 4/4 (100.0%)
+
+✅ Test 1.1: Basic semantic lookup
+   Query: we had trouble with docker last week
+   Type: lookup
+   Status: PASS
+   Execution Time: 6.07s
+   Validation: Found 50 results, top similarity: 0.74
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+✅ Test 1.2: Synonym handling
+   Query: server went down outage incident
+   Type: lookup
+   Status: PASS
+   Execution Time: 2.73s
+   Validation: Found 50 results, top similarity: 0.72
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+✅ Test 1.3: Relevance threshold
+   Query: quantum computing blockchain AI fusion
+   Type: lookup
+   Status: PASS
+   Execution Time: 2.22s
+   Validation: Appropriate uncertainty for 50 sources
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+✅ Test 1.4: Multi-concept query
+   Query: what discussions happened about both docker and deployment?
+   Type: ask
+   Status: PASS
+   Execution Time: 11.97s
+   Validation: Single concept query - skipping multi-concept validation
+   Response Preview: I couldn't find any relevant information about **docker** in the server history. Try asking with different keywords, or the topic may not have been discussed yet.
+
+
+Hybrid BM25 Pipeline
+--------------------------------------------------------------------------------
+Pass Rate: 5/5 (100.0%)
+
+✅ Test 2.1: Exact username lookup [CRITICAL]
+   Query: limo.ew
+   Type: lookup
+   Status: PASS
+   Execution Time: 2.64s
+   Validation: Found 3/10 top results matching 'limo.ew'
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+✅ Test 2.2: Version number exact term [CRITICAL]
+   Query: v2.1 release
+   Type: lookup
+   Status: PASS
+   Execution Time: 2.58s
+   Validation: Found 50 results, top similarity: 0.68
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+✅ Test 2.3: Combined exact + semantic [CRITICAL]
+   Query: what did limo.ew say about docker?
+   Type: ask
+   Status: PASS
+   Execution Time: 14.46s
+   Validation: Found 1/10 top results matching 'limo.ew'
+   Sources Found: 10
+   Response Preview: I cannot answer your question as the question itself was not provided in the prompt. Please provide the question you would like me to answer.
+
+✅ Test 2.4: Channel name exact match
+   Query: #general channel
+   Type: lookup
+   Status: PASS
+   Execution Time: 3.00s
+   Validation: Found 50 results, top similarity: 0.75
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+✅ Test 2.5: Acronym and shorthand
+   Query: PR review LGTM
+   Type: lookup
+   Status: PASS
+   Execution Time: 2.76s
+   Validation: Found 50 results, top similarity: 0.69
+   Sources Found: 50
+   Response Preview: Found 50 messages
+
+
+Graph RAG Pipeline
+--------------------------------------------------------------------------------
+Pass Rate: 1/2 (50.0%)
+
+❌ Test 3.1: Expert finding basic [CRITICAL]
+   Query: who knows the most about docker?
+   Type: ask
+   Status: FAIL
+   Execution Time: 5.85s
+   Validation: Long answer with no sources - likely hallucinated
+   Response Preview: I couldn't find any relevant information about **docker** in the server history. Try asking with different keywords, or the topic may not have been discussed yet.
+
+✅ Test 3.2: Multi-hop entity relationship [CRITICAL]
+   Query: how are limo.ew and docker connected?
+   Type: ask
+   Status: PASS
+   Execution Time: 22.65s
+   Validation: Answer supported by 10 sources
+   Sources Found: 10
+   Response Preview: Here's a summary of recent activity on the Discord server from March 7, 2026:
+
+### Summary of Recent Discord Activity (2026-03-07)
+
+*   **10:29** in channel **##1131555357433548804**: **harshborana** ...
+
+
+Agentic/CRAG Pipeline
+--------------------------------------------------------------------------------
+Pass Rate: 4/4 (100.0%)
+
+✅ Test 5.1: I don't know test [CRITICAL]
+   Query: what did the team decide about switching to Rust for the backend?
+   Type: ask
+   Status: PASS
+   Execution Time: 20.09s
+   Validation: Appropriate uncertainty for 10 sources
+   Sources Found: 10
+   Response Preview: I need a question to answer. Please provide the question you would like me to answer based on the retrieved context.
+
+✅ Test 5.2: Low evidence uncertainty [CRITICAL]
+   Query: what did limo.ew think about work-life balance?
+   Type: ask
+   Status: PASS
+   Execution Time: 9.84s
+   Validation: Appropriate uncertainty for 10 sources
+   Sources Found: 10
+   Response Preview: I cannot answer your question as the question itself was not provided. Please provide the question you would like me to answer based on the retrieved context.
+
+✅ Test 5.3: Confidence gate [CRITICAL]
+   Query: what are the team's thoughts on remote work policy?
+   Type: ask
+   Status: PASS
+   Execution Time: 9.15s
+   Validation: Appropriate uncertainty for 10 sources
+   Sources Found: 10
+   Response Preview: I cannot answer your question as no question was provided. Please provide a question for me to answer using the retrieved context.
+
+✅ Test 5.5: Source-constrained generation [CRITICAL]
+   Query: summarise the main technical decisions made in this server
+   Type: ask
+   Status: PASS
+   Execution Time: 20.38s
+   Validation: Answer supported by 10 sources
+   Sources Found: 10
+   Response Preview: I apologize, but the question you would like me to answer is missing from your prompt. Please provide the question so I can assist you using the retrieved context.
+
+
+🔴 CRITICAL FAILURES - REQUIRES IMMEDIATE ATTENTION
+================================================================================
+Test 3.1: Expert finding basic
+  Issue: Long answer with no sources - likely hallucinated
+  Query: who knows the most about docker?
+
+
+RECOMMENDATIONS
+================================================================================
+⚠️  Fix critical failures before proceeding with other improvements
+📊 1 tests failed - review validation notes above
+
+================================================================================
+End of Report
+================================================================================
