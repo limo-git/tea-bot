@@ -11,19 +11,19 @@ WHERE toLower(e.name) CONTAINS toLower($entity_name)
    OR toLower($entity_name) CONTAINS toLower(e.name)
 OPTIONAL MATCH (m)<-[:SENT]-(a:Author)
 WHERE m.timestamp IS NOT NULL
-WITH e, m, c, a
-ORDER BY m.timestamp DESC
-RETURN e.name        AS entity,
-       e.type        AS entity_type,
-       e.description AS description,
-       collect({
+WITH e, collect({
            content:   m.content,
            timestamp: m.timestamp,
            channel:   c.name,
            author:    a.username
-       })[..20]       AS messages
+       }) AS all_messages
+WITH e, all_messages
 ORDER BY e.mention_count DESC
 LIMIT 5
+RETURN e.name        AS entity,
+       e.type        AS entity_type,
+       e.description AS description,
+       all_messages[..20] AS messages
 """
 
 # ── relational ────────────────────────────────────────────────────────────────

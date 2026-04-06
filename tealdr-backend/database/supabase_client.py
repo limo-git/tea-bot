@@ -91,7 +91,12 @@ class SupabaseClient:
         try:
             # Convert query to tsquery format
             # Handle multi-word queries by joining with &
-            query_terms = query.strip().split()
+            # Remove special characters that break tsquery syntax
+            import re
+            cleaned_query = re.sub(r'[<>@!?:;,.\[\]{}()\'"\\]', ' ', query)
+            query_terms = [term for term in cleaned_query.strip().split() if term]
+            if not query_terms:
+                return []
             tsquery = ' & '.join(query_terms)
             
             # Perform full-text search with ts_rank scoring
