@@ -107,8 +107,23 @@ async def understand_query(query: str) -> dict:
                 logger.error("Could not recover query understanding JSON, using defaults")
                 result = {}
         
-        result.setdefault("intent", "summarization")
-        result.setdefault("primary_entity", "")
+        # Smart defaults based on query content
+        query_lower = query.lower()
+        import re
+        has_user_mention = bool(re.search(r'<@!?\d+>|@\w+', query))
+        is_user_query = any(phrase in query_lower for phrase in ["what is", "what's", "what do", "what does", "know about", "upto", "up to", "doing", "said", "messages from", "tell me about"])
+        
+        # Determine default intent based on query type
+        if has_user_mention and is_user_query:
+            default_intent = "user_messages"
+            logger.info("Detected user-specific query in defaults, using user_messages intent")
+        elif any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+            default_intent = "summarization"
+        else:
+            default_intent = "lookup"
+        
+        result.setdefault("intent", default_intent)
+        result.setdefault("primary_entity", query if has_user_mention else "")
         result.setdefault("primary_entity_type", None)
         result.setdefault("secondary_entity", None)
         result.setdefault("secondary_entity_type", None)
@@ -119,7 +134,6 @@ async def understand_query(query: str) -> dict:
         # Fix for general server activity queries
         if not result["primary_entity"] or result["primary_entity"] in ["", "**", "*"]:
             # Check if this is a general server activity query
-            query_lower = query.lower()
             if any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
                 result["primary_entity"] = "server"
                 result["intent"] = "summarization"
