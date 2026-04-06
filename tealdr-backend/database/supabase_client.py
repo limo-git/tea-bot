@@ -98,7 +98,7 @@ class SupabaseClient:
             result = self.client.table('messages')\
                 .select('*')\
                 .eq('server_id', server_id)\
-                .text_search('content_tsv', tsquery, config='english')\
+                .text_search('content_tsv', tsquery)\
                 .limit(limit)\
                 .execute()
             

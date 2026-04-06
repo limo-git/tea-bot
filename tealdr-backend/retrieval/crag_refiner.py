@@ -4,6 +4,7 @@ Handles low-confidence queries by refining and re-retrieving.
 """
 
 import logging
+import json
 from typing import Dict, List, Optional
 from google import genai
 from config import Config
@@ -117,7 +118,7 @@ async def generate_refined_queries(original_query: str, intent: str, avg_similar
         )
         
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.5-flash',
             contents=prompt,
             config={
                 'temperature': 0.7,
@@ -126,7 +127,6 @@ async def generate_refined_queries(original_query: str, intent: str, avg_similar
         )
         
         # Parse JSON response
-        import json
         refined_queries = json.loads(response.text.strip())
         
         if not isinstance(refined_queries, list):
