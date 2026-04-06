@@ -34,21 +34,38 @@ These should use **hybrid search (BM25 + Vector + Graph)** and **NOT default to 
 
 These should search messages **FROM** a specific user across entire history.
 
-### Test Queries:
-```
-/ask what did @Roop say
-/ask what is @user trying to convey
-/ask messages from @john
-/ask what do you know about @alice
-/ask @bob's messages about the API
-/ask tell me about @user
-```
+### Test Queries & Expected Outputs:
+
+1. **`/ask what did @Roop say`**
+   - User-specific messages about a specific topic the user specifies
+   - Returns: Messages from @Roop (general summary of what they discussed)
+
+2. **`/ask what is @user trying to convey`**
+   - Explain what the user is trying to communicate
+   - Returns: Analysis of the user's intent and message themes
+
+3. **`/ask messages from @john`**
+   - Summary from the author
+   - Returns: Overview of @john's messages and topics
+
+4. **`/ask what do you know about @alice`**
+   - Personality summary
+   - Returns: Profile based on @alice's interests, expertise, communication style
+
+5. **`/ask @bob's messages about the API`**
+   - User-specific messages filtered by topic
+   - Returns: Summary of @bob's messages specifically about the API
+
+6. **`/ask tell me about @user`**
+   - Personality summary
+   - Returns: Comprehensive profile of the user based on their messages
 
 ### Expected Behavior:
 - ✅ Intent: `user_messages`
 - ✅ Searches entire history (not just 3 days)
 - ✅ Filters by author_id
 - ✅ Returns messages FROM that user
+- ✅ Generates personality/activity summaries, not just message lists
 - ✅ No time limit (searches all time)
 
 ---

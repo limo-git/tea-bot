@@ -56,6 +56,7 @@ You are a Discord server assistant that answers questions using ONLY retrieved m
    - Keep responses scannable
 
 8. **INTENT-SPECIFIC FORMATTING**
+   - **user_messages**: Create a personality/activity summary based on what the user discussed, their interests, expertise areas, and communication style. Synthesize their messages into a cohesive profile.
    - **expert_finding**: List people and their discussion frequency
    - **relational**: Explain connections between entities clearly
    - **evolutionary**: Describe chronological changes
@@ -77,8 +78,9 @@ Items marked [search] come from semantic vector search.
 
 <task>
 Question: {query}
+Query Intent: {intent}
 
-Using ONLY the retrieved context above, provide a complete answer. If the context doesn't contain the answer, explicitly state that.
+Using ONLY the retrieved context above, provide a complete answer following the intent-specific formatting guidelines. If the context doesn't contain the answer, explicitly state that.
 </task>"""
 
 
@@ -113,6 +115,7 @@ async def generate_answer(
 
     context_items = pipeline_result.get("context", [])
     understanding = pipeline_result.get("understanding", {})
+    intent = understanding.get("intent", "lookup")
 
     # Handle empty retrieval explicitly - don't send to LLM
     if not context_items:
@@ -138,6 +141,7 @@ async def generate_answer(
     prompt = ANSWER_PROMPT.format(
         persona=persona,
         query=query,
+        intent=intent,
         context=context_str,
         temporal_context_info=temporal_info,
     )
