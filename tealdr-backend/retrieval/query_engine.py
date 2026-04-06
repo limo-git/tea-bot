@@ -22,7 +22,7 @@ QUERY_UNDERSTANDING_PROMPT = """Analyze this user query and extract structured i
 Query: "{query}"
 
 Return JSON with these fields:
-{
+{{
   "intent": "lookup | expert_finding | relational | evolutionary | summarization | user_messages | temporal_context | conversation_threads",
   "primary_entity": "main topic/person/thing being asked about",
   "primary_entity_type": "person | topic | technology | null",
@@ -31,7 +31,7 @@ Return JSON with these fields:
   "search_terms": ["key", "search", "terms"],
   "temporal_context_needed": true/false,
   "time_scope": "recent | days | weeks | months | all_time"
-}
+}}
 
 Intent Classification Rules (CRITICAL - follow strictly):
 
