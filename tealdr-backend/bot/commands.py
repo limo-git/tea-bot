@@ -271,6 +271,29 @@ class BotCommands:
             if min_length:
                 logger.info(f"Filtering by min length: {min_length}")
             
+            # ── FAQ Handler - Check for common questions first ──────────────────
+            from utils.faq_handler import check_faq, is_general_greeting
+            
+            faq_response = check_faq(query)
+            if faq_response:
+                logger.info(f"FAQ response provided for query: {query[:50]}")
+                await interaction.followup.send(faq_response)
+                return
+            
+            # Check if it's just a greeting without a real question
+            if is_general_greeting(query):
+                logger.info(f"General greeting detected, providing welcome message")
+                greeting_response = """👋 Hey! I'm TeaL;DR, your Discord search assistant.
+
+Try asking me something like:
+• `/ask what did we discuss about [topic]?`
+• `/lookup clues: [keywords]`
+• `/recap period: last 7 days`
+
+I can search through your server's message history and help you find what you're looking for!"""
+                await interaction.followup.send(greeting_response)
+                return
+            
             persona = await server_settings_client.get_bot_persona(guild.id)
             requester_name = interaction.user.display_name
 
