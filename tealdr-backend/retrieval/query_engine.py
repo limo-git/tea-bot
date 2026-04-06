@@ -387,8 +387,15 @@ async def run_query_pipeline(
     from retrieval.hybrid_search import hybrid_search_with_graph
     
     # For lookup queries, use the entity name + search terms for better semantic matching
+    # Avoid duplicating entity if it's already in search terms
     if intent == "lookup" and understanding.get("primary_entity"):
-        search_query = f"{understanding['primary_entity']} {' '.join(understanding.get('search_terms', []))}"
+        entity = understanding.get('primary_entity', '')
+        search_terms = understanding.get('search_terms', [])
+        # Check if entity is already in search terms to avoid duplication
+        if entity and entity.lower() not in ' '.join(search_terms).lower():
+            search_query = f"{entity} {' '.join(search_terms)}"
+        else:
+            search_query = ' '.join(search_terms) if search_terms else entity
     else:
         search_query = " ".join(understanding.get("search_terms", [query]))
     
