@@ -20,6 +20,12 @@ async def vector_search(query: str, server_id: int, author_id: int = None,
     For summarization queries (e.g., "what did I miss"), prioritizes recency over semantic similarity.
     """
     try:
+        # SAFETY CHECK: If author_id is provided, this is a user-specific query
+        # Don't limit to 3 days even if intent is "summarization"
+        if author_id and intent == "summarization":
+            logger.info(f"User-specific query detected (author_id={author_id}), overriding summarization intent to search entire history")
+            intent = "user_messages"
+        
         # For summarization queries (general server activity), get all recent messages
         if intent == "summarization":
             # Default to last 3 days for summarization if no time range specified
