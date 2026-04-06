@@ -17,42 +17,78 @@ _client: genai.Client | None = None
 
 INTENT_TYPES = ["lookup", "relational", "evolutionary", "expert_finding", "summarization", "temporal_context", "conversation_threads"]
 
-QUERY_UNDERSTANDING_PROMPT = """Analyze this Discord server query and extract structured information.
+QUERY_UNDERSTANDING_PROMPT = """Analyze this user query and extract structured information.
 
 Query: "{query}"
 
-Return:
-{{
-  "intent": "lookup | relational | evolutionary | expert_finding | summarization | temporal_context | conversation_threads | user_messages",
-  "primary_entity": "main entity (lowercase)",
+Return JSON with these fields:
+{
+  "intent": "lookup | expert_finding | relational | evolutionary | summarization | user_messages | temporal_context | conversation_threads",
+  "primary_entity": "main topic/person/thing being asked about",
   "primary_entity_type": "person | topic | technology | null",
-  "search_terms": ["keywords"],
+  "secondary_entity": "second entity if comparing/relating two things",
+  "secondary_entity_type": "person | topic | technology | null",
+  "search_terms": ["key", "search", "terms"],
   "temporal_context_needed": true/false,
   "time_scope": "recent | days | weeks | months | all_time"
-}}
+}
 
-Intent guide (choose the MOST SPECIFIC intent):
-- "what did @user say" / "what is @user trying to convey" / "@user's messages" / "messages from @user" → user_messages (find messages FROM a specific user)
-- "who talked about X" / "who mentioned X" / "who was discussing X" → lookup (find messages about X)
-- "who knows X" / "who is expert in X" → expert_finding  
-- "what did X say about Y" → user_messages (X is person, Y is topic - filter by user AND topic)
-- "how are X and Y related" → relational
-- "tell me about X" / "what is X" / "explain X" → lookup
-- "what happened with X over time" / "how did X evolve" → temporal_context
-- "continue the discussion about X" → conversation_threads
-- "what did i miss" / "what happened" / "server activity" / "recent activity" (NO specific entity) → summarization 
+Intent Classification Rules (CRITICAL - follow strictly):
 
-IMPORTANT: 
-- If query asks about messages FROM a specific user (e.g., "what @user said", "@user's messages"), use "user_messages" intent
-- If query asks about a SPECIFIC topic/person/thing, use "lookup" NOT "summarization"
-- Only use "summarization" for general server activity with NO specific entity
-- Extract the actual entity name from the query (e.g., "geopolitics" from "who talked about geopolitics")
-- For user mentions like @username or <@123456>, extract the username as the entity and set type to "person"
+1. **user_messages** - Messages FROM a specific user
+   - "what did @user say"
+   - "@user's messages" 
+   - "messages from @user"
+   - "what is @user trying to convey"
+   - ANY query with user mention + asking about their messages
 
-Temporal context indicators:
-- "context", "background", "what happened before", "continuation", "follow-up"
-- "over time", "previously", "earlier", "later", "then", "after that"
-- "connect", "relate", "link", "sequence", "thread"
+2. **lookup** - Find messages ABOUT a specific topic/entity
+   - "who talked about X"
+   - "who mentioned X"
+   - "tell me about X"
+   - "what is X"
+   - "find messages about X"
+   - "discussions about X"
+   - ANY query with a SPECIFIC entity/topic
+
+3. **expert_finding** - Find who knows about a topic
+   - "who knows X"
+   - "who is expert in X"
+   - "who can help with X"
+
+4. **relational** - Relationship between entities
+   - "how are X and Y related"
+   - "connection between X and Y"
+
+5. **temporal_context** - How something evolved
+   - "what happened with X over time"
+   - "how did X evolve"
+
+6. **conversation_threads** - Continue a discussion
+   - "continue the discussion about X"
+   - "thread about X"
+
+7. **summarization** - General server activity (NO specific entity)
+   - "what did i miss"
+   - "what happened"
+   - "server activity"
+   - "recent activity"
+   - ONLY when NO specific topic/entity mentioned
+
+CRITICAL RULES:
+- DEFAULT to "lookup" if there's ANY specific entity/topic
+- ONLY use "summarization" if query is about general server activity with NO entity
+- If user mention present → "user_messages"
+- If specific topic present → "lookup"
+- Extract actual entity names (e.g., "API" from "who talked about API")
+- For @username or <@123456> → entity_type = "person"
+
+Examples:
+- "who talked about geopolitics" → intent: lookup, entity: geopolitics
+- "what did @john say" → intent: user_messages, entity: john
+- "tell me about the API" → intent: lookup, entity: API
+- "what happened" → intent: summarization, entity: server
+- "who knows Python" → intent: expert_finding, entity: Python
 
 JSON only:"""
 
@@ -113,14 +149,30 @@ async def understand_query(query: str) -> dict:
         has_user_mention = bool(re.search(r'<@!?\d+>|@\w+', query))
         is_user_query = any(phrase in query_lower for phrase in ["what is", "what's", "what do", "what does", "know about", "upto", "up to", "doing", "said", "messages from", "tell me about"])
         
-        # Determine default intent based on query type
+        # Check for specific entities/topics in query (keywords that indicate a specific topic)
+        topic_indicators = ["about", "regarding", "concerning", "related to", "discussed", "mentioned", "talked about"]
+        has_topic = any(indicator in query_lower for indicator in topic_indicators)
+        
+        # Check for question words that indicate lookup
+        lookup_patterns = ["who", "what", "where", "when", "how", "why", "which", "tell me", "find", "search", "show me"]
+        is_lookup_query = any(pattern in query_lower for pattern in lookup_patterns)
+        
+        # Determine default intent based on query type (PREFER lookup over summarization)
         if has_user_mention and is_user_query:
             default_intent = "user_messages"
             logger.info("Detected user-specific query in defaults, using user_messages intent")
-        elif any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]):
+        elif any(phrase in query_lower for phrase in ["what did i miss", "what happened", "server activity", "recent activity", "while i was away", "what's new"]) and not has_topic:
+            # Only use summarization if it's general activity AND no specific topic
             default_intent = "summarization"
-        else:
+            logger.info("Detected general server activity query, using summarization intent")
+        elif is_lookup_query or has_topic:
+            # Default to lookup if there are question words or topic indicators
             default_intent = "lookup"
+            logger.info("Detected specific query, using lookup intent")
+        else:
+            # Final fallback: lookup (NOT summarization)
+            default_intent = "lookup"
+            logger.info("Using lookup as default intent")
         
         result.setdefault("intent", default_intent)
         result.setdefault("primary_entity", query if has_user_mention else "")
@@ -331,31 +383,47 @@ async def run_query_pipeline(
     # Step 2 — Standard Graph traversal (for non-temporal queries)
     graph_results = await graph_traversal(intent, understanding, server_id, time_range)
 
-    # Step 3 — Vector search (always runs in parallel for semantic coverage)
+    # Step 3 — TRUE HYBRID SEARCH (BM25 + Vector + Graph with RRF Fusion)
+    from retrieval.hybrid_search import hybrid_search_with_graph
+    
     # For lookup queries, use the entity name + search terms for better semantic matching
     if intent == "lookup" and understanding.get("primary_entity"):
         search_query = f"{understanding['primary_entity']} {' '.join(understanding.get('search_terms', []))}"
     else:
         search_query = " ".join(understanding.get("search_terms", [query]))
     
-    logger.info(f"Vector search query: '{search_query[:100]}'")
+    logger.info(f"Hybrid search query: '{search_query[:100]}'")
     
-    vector_results = await vector_search(
+    # Hybrid search with RRF fusion (BM25 + Vector + Graph)
+    fused_results = await hybrid_search_with_graph(
         query=search_query,
         server_id=server_id,
+        graph_results=graph_results,
         author_id=author_id,
         channel_id=channel_id,
         time_range=time_range,
-        intent=intent,  # Pass intent to prioritize recency for summarization queries
-        mentions_user_id=mentions_user_id,
+        limit=50
     )
+    
+    logger.info(f"Hybrid search returned {len(fused_results)} fused results")
 
-    # P3: CRAG refinement loop for low-confidence queries
+    # Step 4 — RERANKING (Cross-encoder scoring)
+    from retrieval.reranker import rerank_results
+    
+    reranked_results = await rerank_results(
+        query=search_query,
+        results=fused_results,
+        top_k=30
+    )
+    
+    logger.info(f"Reranking complete: {len(reranked_results)} results")
+
+    # Step 5 — CRAG refinement loop for low-confidence queries
     from retrieval.crag_refiner import refine_and_retrieve
     
-    vector_results = await refine_and_retrieve(
+    refined_results = await refine_and_retrieve(
         original_query=query,
-        original_results=vector_results,
+        original_results=reranked_results,
         intent=intent,
         server_id=server_id,
         author_id=author_id,
@@ -364,8 +432,19 @@ async def run_query_pipeline(
         mentions_user_id=mentions_user_id
     )
 
-    # Step 4 — Context assembly
-    context = assemble_context(graph_results, vector_results, intent)
+    # Step 6 — CONTEXT COMPRESSION (Token budget management)
+    from retrieval.compressor import compress_to_budget
+    
+    compressed_results = compress_to_budget(
+        query=search_query,
+        results=refined_results,
+        token_budget=4000  # Leave room for prompt + answer
+    )
+    
+    logger.info(f"Compression complete: {len(compressed_results)} results within token budget")
+
+    # Step 7 — Context assembly (format for prompt)
+    context = assemble_context(graph_results, compressed_results, intent)
 
     return {
         "understanding": understanding,

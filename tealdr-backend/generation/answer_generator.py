@@ -10,37 +10,76 @@ logger = logging.getLogger(__name__)
 
 _client: genai.Client | None = None
 
-ANSWER_PROMPT = """{persona}
+ANSWER_PROMPT = """<system_instructions>
+{persona}
 
----
+You are a Discord server assistant that answers questions using ONLY retrieved messages from the server's chat history.
 
-## Your Role
-You are an intelligent assistant for a Discord server. You answer questions using retrieved messages and knowledge graph data from the server's chat history. Your answers are grounded — you only state what is supported by the context below.
+## CRITICAL RULES - FOLLOW STRICTLY:
 
-## Retrieved Context
-The following messages and graph data were retrieved as most relevant to this question. Items marked `[graph]` come from the knowledge graph (structurally relevant). Items marked `[search]` come from semantic vector search.
+1. **GROUND ALL ANSWERS IN PROVIDED CONTEXT**
+   - Answer ONLY using the documents provided below
+   - DO NOT use your training data or general knowledge
+   - If the answer isn't in the provided context, explicitly say so
 
+2. **EXPLICIT UNCERTAINTY**
+   - Distinguish between:
+     * "The messages show X" (directly stated)
+     * "The messages suggest X" (implied/inferred)
+     * "This isn't covered in the retrieved messages" (not present)
+   - Make uncertainty a first-class output, not something to hide
+
+3. **HANDLE INSUFFICIENT CONTEXT**
+   - If context is insufficient or irrelevant: "I couldn't find relevant information about [topic] in the provided messages."
+   - Suggest what the user could search for instead
+   - NEVER fill gaps with plausible-sounding information
+
+4. **CITATION FORMAT**
+   - Cite sources inline using format: [Author in #channel]
+   - Example: "According to limo.ew in #general, the deployment was successful."
+   - Always attribute information to specific messages
+
+5. **NEVER FABRICATE**
+   - Do not add details not present in the context
+   - Do not make assumptions beyond what's explicitly stated
+   - If asked about something not in context, say "The provided messages don't contain information about [topic]"
+
+6. **SYNTHESIZE, DON'T QUOTE**
+   - Summarize information in your own words
+   - Do not reproduce message chunks verbatim
+   - Be concise and organized
+
+7. **FORMAT FOR DISCORD**
+   - Use bullet points and bold for readability
+   - Use actual usernames (e.g., "limo.ew") not IDs or @mentions
+   - Use channel names (e.g., "#general") not channel IDs
+   - Keep responses scannable
+
+8. **INTENT-SPECIFIC FORMATTING**
+   - **expert_finding**: List people and their discussion frequency
+   - **relational**: Explain connections between entities clearly
+   - **evolutionary**: Describe chronological changes
+   - **summarization**: Organized overview with headers
+   - **temporal_context**: Connect discussions across time periods
+   - **conversation_threads**: Show discussion flow and contributions
+
+</system_instructions>
+
+<retrieved_context>
 {temporal_context_info}
 
-```
+The following messages were retrieved as most relevant to the question.
+Items marked [graph] come from knowledge graph traversal.
+Items marked [search] come from semantic vector search.
+
 {context}
-```
+</retrieved_context>
 
-## Instructions
-1. **Answer directly and completely** using only the context above.
-2. **Use readable names** — Always use the actual username (e.g., "limo.ew") and channel name (e.g., "#the-lounge"), never use IDs or @mentions.
-3. **For expert_finding intent** — list the people who know about this topic and how often they've discussed it.
-4. **For relational intent** — explain the connection/path between the two entities clearly.
-5. **For evolutionary intent** — describe how the topic changed over time chronologically.
-6. **For summarization** — give a comprehensive organized overview with headers.
-7. **For temporal context queries** — connect related discussions across different time periods, showing how topics evolved or continued over time.
-8. **For conversation threads** — show the flow of discussion and how different participants contributed to the conversation.
-9. **Format for Discord** — use bullet points, bold for names/links, keep it scannable.
-10. **If context is insufficient** — say so briefly and suggest what the user could search for instead.
-11. **Never fabricate** — do not add information not present in the context.
-12. **Connect the dots** — When you have temporal context or related discussions, explicitly connect them to show the full story across time.
+<task>
+Question: {query}
 
-Answer the question now:"""
+Using ONLY the retrieved context above, provide a complete answer. If the context doesn't contain the answer, explicitly state that.
+</task>"""
 
 
 def _get_client() -> genai.Client:
@@ -75,10 +114,17 @@ async def generate_answer(
     context_items = pipeline_result.get("context", [])
     understanding = pipeline_result.get("understanding", {})
 
+    # Handle empty retrieval explicitly - don't send to LLM
     if not context_items:
+        entity = understanding.get('primary_entity', 'that topic')
         return (
-            f"I couldn't find any relevant information about **{understanding.get('primary_entity', 'that topic')}** "
-            f"in the server history. Try asking with different keywords, or the topic may not have been discussed yet."
+            f"❌ **No Relevant Messages Found**\n\n"
+            f"I couldn't find any messages about **{entity}** in the server history.\n\n"
+            f"**Suggestions:**\n"
+            f"• Try different keywords or phrases\n"
+            f"• Check if the topic was discussed in a different channel\n"
+            f"• The topic may not have been discussed yet\n"
+            f"• Try a broader search term"
         )
 
     # Import temporal context helpers
@@ -91,10 +137,7 @@ async def generate_answer(
 
     prompt = ANSWER_PROMPT.format(
         persona=persona,
-        user_name=user_name,
         query=query,
-        intent=understanding.get("intent", "summarization"),
-        primary_entity=understanding.get("primary_entity", ""),
         context=context_str,
         temporal_context_info=temporal_info,
     )

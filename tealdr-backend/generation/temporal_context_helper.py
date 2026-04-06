@@ -89,7 +89,8 @@ def _generate_temporal_context_info(pipeline_result: dict, context_items: List[d
 
 def format_context_for_prompt(context_items: List[dict]) -> str:
     """
-    Enhanced context formatter that highlights temporal relationships.
+    Format context with structured metadata for RAG best practices.
+    Each chunk includes visible metadata: source type, timestamp, author, channel.
     """
     if not context_items:
         return "No relevant context found."
@@ -103,7 +104,7 @@ def format_context_for_prompt(context_items: List[dict]) -> str:
         channel = item.get("channel", "")
         timestamp = item.get("timestamp", "")
         
-        # Format timestamp
+        # Format timestamp for provenance
         time_str = ""
         if timestamp:
             try:
@@ -111,20 +112,29 @@ def format_context_for_prompt(context_items: List[dict]) -> str:
                     dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 else:
                     dt = timestamp
-                time_str = dt.strftime("%Y-%m-%d %H:%M")
+                time_str = dt.strftime("%Y-%m-%d %H:%M UTC")
             except:
                 time_str = str(timestamp)[:16]
         
-        # Build base item
-        item_parts = [f"[{source}] {author}"]
-        
-        if channel:
-            item_parts.append(f"in #{channel}")
+        # Structured metadata header - visible to model for provenance reasoning
+        metadata_parts = [f"[Doc {i}"]
         
         if time_str:
-            item_parts.append(f"({time_str})")
+            metadata_parts.append(f"| {time_str}")
         
-        # Add temporal context indicators
+        metadata_parts.append(f"| source: {source}")
+        
+        if author:
+            metadata_parts.append(f"| author: {author}")
+        
+        if channel:
+            metadata_parts.append(f"| channel: #{channel}")
+        
+        metadata_parts.append("]")
+        
+        metadata_header = " ".join(metadata_parts)
+        
+        # Add temporal context indicators if present
         temporal_indicators = []
         
         if item.get("temporal_context"):
@@ -151,11 +161,14 @@ def format_context_for_prompt(context_items: List[dict]) -> str:
                 if entities:
                     temporal_indicators.append(f"[MENTIONS: {', '.join(entities[:2])}]")
         
-        # Combine all parts
-        header = " ".join(item_parts)
-        if temporal_indicators:
-            header += " " + " ".join(temporal_indicators)
+        # Combine metadata header with temporal indicators and content
+        formatted_item = metadata_header
         
-        formatted_items.append(f"{i}. {header}\n   \"{content}\"")
+        if temporal_indicators:
+            formatted_item += f" {' '.join(temporal_indicators)}"
+        
+        formatted_item += f"\n{content}\n"
+        
+        formatted_items.append(formatted_item)
     
-    return "\n\n".join(formatted_items)
+    return "\n---\n".join(formatted_items)
