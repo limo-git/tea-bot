@@ -99,11 +99,10 @@ class SupabaseClient:
                 .select('*')\
                 .eq('server_id', server_id)\
                 .text_search('content_tsv', tsquery)\
-                .limit(limit)\
                 .execute()
             
             # Add rank scores (Supabase doesn't return ts_rank directly, so we assign based on order)
-            messages = result.data
+            messages = result.data[:limit]  # Limit results after fetch
             for i, msg in enumerate(messages):
                 # Assign descending rank scores (higher is better)
                 msg['bm25_rank'] = 1.0 - (i / max(len(messages), 1))

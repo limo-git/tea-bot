@@ -457,5 +457,5 @@ async def run_query_pipeline(
         "understanding": understanding,
         "context": context,
         "graph_results": graph_results,
-        "vector_results": vector_results,
+        "vector_results": compressed_results,  # Use compressed results as vector_results
     }
